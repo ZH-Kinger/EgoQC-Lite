@@ -1,0 +1,29 @@
+{
+  "schema_version": "egoqc-visual-model-tasks-v1",
+  "policy": {
+    "model_may_override_rule_failure": false,
+    "uncalibrated_model_may_auto_reject": false,
+    "default_route": "human_review",
+    "minimum_gold_positives_per_task": 50,
+    "minimum_gold_negatives_per_task": 50
+  },
+  "rule_only": [
+    "schema_error",
+    "video_decode_error",
+    "frame_count_mismatch",
+    "timestamp_drift",
+    "mano_invalid_so3",
+    "wrist_inconsistent",
+    "fps_below_requirement",
+    "resolution_below_requirement"
+  ],
+  "model_tasks": {
+    "hand_absent": {"label": "手部长时间离画", "minimum_auto_reject_precision": 0.99},
+    "persistent_extra_hands": {"label": "疑似第二个人的手", "minimum_auto_reject_precision": 0.99},
+    "semantic_camera_shake": {"label": "无意义相机抖动", "minimum_auto_reject_precision": 0.99},
+    "severe_occlusion": {"label": "影响操作理解的严重遮挡", "minimum_auto_reject_precision": 0.99},
+    "mano_overlay_drift": {"label": "MANO骨骼或mesh视觉漂移", "minimum_auto_reject_precision": 0.995},
+    "task_label_mismatch": {"label": "任务文本与视频不一致", "minimum_auto_reject_precision": 0.995},
+    "subtask_boundary_error": {"label": "子任务边界不合理", "minimum_auto_reject_precision": 0.995}
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "profile_version": "vitra-mano108-groot-v2-draft-0.1",
+  "status": "draft",
+  "canonical_source": "lerobot-v3",
+  "target": {
+    "framework": "NVIDIA Isaac-GR00T",
+    "dataset_format": "groot-lerobot-v2",
+    "required_meta": [
+      "info.json",
+      "episodes.jsonl",
+      "tasks.jsonl",
+      "modality.json",
+      "stats.json",
+      "relative_stats.json"
+    ]
+  },
+  "state": {
+    "dtype": "float32",
+    "size": 108,
+    "fields": {
+      "left_wrist_xyz": [0, 3],
+      "left_wrist_rot6d": [3, 9],
+      "left_mano_pose": [9, 54],
+      "right_wrist_xyz": [54, 57],
+      "right_wrist_rot6d": [57, 63],
+      "right_mano_pose": [63, 108]
+    }
+  },
+  "action": {
+    "dtype": "float32",
+    "size": 108,
+    "source": "next_absolute_state",
+    "terminal_policy": "drop_last_observation_and_video_frame"
+  },
+  "valid_span": {
+    "policy": "both_valid",
+    "minimum_source_states": 3,
+    "preserve_source_lineage": true
+  },
+  "rotation": {
+    "wrist_input": "axis_angle_radians",
+    "rot6d_convention": "BLOCKED_UNTIL_PROCESSOR_CONVENTION_IS_FROZEN",
+    "relative_rotation": "processor_transform_not_vector_subtraction"
+  },
+  "annotation": {
+    "parquet_key": "annotation.human.task_description",
+    "modality_key": "human.task_description"
+  },
+  "robot20": {
+    "enabled": false,
+    "profile": "config/robot20_profile.example.json",
+    "blocked_on": [
+      "retargeting_commit",
+      "retargeting_repository_or_interface"
+    ]
+  }
+}

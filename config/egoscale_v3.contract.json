@@ -1,0 +1,139 @@
+{
+  "contract_id": "egoscale-v3.0",
+  "document_version": "V3.0",
+  "status": "candidate",
+  "outcomes": ["qualified", "remediation", "unqualified"],
+  "metric_statuses": ["pass", "fail", "review", "null", "not_applicable"],
+  "policy": {
+    "missing_required_metric": "fail",
+    "missing_reference_metric": "null",
+    "missing_ground_truth_metric": "null",
+    "reference_metric_can_reject": false,
+    "raw_is_immutable": true,
+    "supplier_revision_required_after_remediation": true
+  },
+  "coordinate_systems": {
+    "camera": {
+      "convention": "opencv",
+      "axes": {"x": "right", "y": "down", "z": "forward"}
+    },
+    "world_mode": {
+      "required_declaration": true,
+      "allowed": ["first_valid_camera", "gravity_aligned"]
+    },
+    "first_valid_camera": {
+      "origin": "first_valid_frame_camera_center",
+      "initial_translation_m": [0.0, 0.0, 0.0],
+      "initial_quaternion_xyzw": [0.0, 0.0, 0.0, 1.0],
+      "selection_provenance_required": true
+    },
+    "gravity_aligned": {
+      "origin": "first_valid_frame_camera_center",
+      "y_axis": "gravity_down",
+      "x_axis": "first_valid_camera_right_projected_to_gravity_plane",
+      "gravity_source_required": true
+    },
+    "hand_local": {
+      "mano_origin": "wrist_root",
+      "non_mano_definition_required": true
+    }
+  },
+  "sampling": {
+    "minimum_random_episodes": 1000,
+    "language_instructions_per_language": 3000,
+    "pairwise_distance_pairs": 1000,
+    "visual_diversity_queries": 5000,
+    "seed_required": true,
+    "sample_manifest_required": true
+  },
+  "hard_metrics": {
+    "video_fps": {"op": ">=", "value": 30.0, "unit": "fps"},
+    "video_height": {"op": ">=", "value": 720, "unit": "pixel"},
+    "frame_interval_jitter_mean": {"op": "<=", "value": 2.0, "unit": "ms"},
+    "frame_interval_jitter_max": {"op": "<=", "value": 5.0, "unit": "ms"},
+    "time_alignment_error_max": {"op": "<=", "value": 5.0, "unit": "ms"},
+    "bad_frame_ratio": {"op": "<", "value": 0.03, "unit": "ratio"},
+    "odsr_micro_f1": {"op": ">=", "value": 0.99, "unit": "ratio", "requires_ground_truth": true},
+    "hand_mpjpe": {"op": "<=", "value": 10.0, "unit": "mm", "requires_ground_truth": true},
+    "thumb_tip_mpjpe": {"op": "<=", "value": 10.0, "unit": "mm", "requires_ground_truth": true},
+    "index_tip_mpjpe": {"op": "<=", "value": 10.0, "unit": "mm", "requires_ground_truth": true},
+    "middle_tip_mpjpe": {"op": "<=", "value": 10.0, "unit": "mm", "requires_ground_truth": true},
+    "ring_tip_mpjpe": {"op": "<=", "value": 10.0, "unit": "mm", "requires_ground_truth": true},
+    "pinky_tip_mpjpe": {"op": "<=", "value": 10.0, "unit": "mm", "requires_ground_truth": true},
+    "rotation_error_per_axis": {"op": "<=", "value": 10.0, "unit": "degree", "requires_reference": true},
+    "rotation_error_axis_sum": {"op": "<=", "value": 20.0, "unit": "degree", "requires_reference": true},
+    "pairwise_distance": {"op": ">=", "value": 1.2, "unit": "score"},
+    "distinct_2_zh": {"op": ">=", "value": 0.60, "unit": "ratio"},
+    "distinct_2_en": {"op": ">=", "value": 0.30, "unit": "ratio"},
+    "semantic_annotation_accuracy": {"op": ">=", "value": 0.95, "unit": "ratio", "requires_human_audit": true},
+    "episodes_per_task_scene": {"op": "<", "value": 30, "unit": "episode"}
+  },
+  "formula_metrics": {
+    "instantaneous_velocity": {
+      "formula": "norm(x[t]-x[t-1])/delta_t",
+      "outlier_rule": "v[t] < median(v)+3*MAD(v)"
+    },
+    "frame_interval_jitter": {
+      "formula": "abs(delta_t_real-delta_t_ideal)"
+    },
+    "time_alignment_error": {
+      "formula": "abs(t_image[i]-t_label[i])"
+    }
+  },
+  "required_metadata": [
+    "capture_scheme_type",
+    "camera_count",
+    "capture_view",
+    "projection_model",
+    "device_form",
+    "device_model",
+    "data_source",
+    "sensor_modalities",
+    "body_mobility",
+    "glove_usage",
+    "environment_type",
+    "annotated_projection_samples_available"
+  ],
+  "required_episode_metadata": [
+    "operator_profile",
+    "scene_label",
+    "task_label",
+    "object_labels"
+  ],
+  "required_frame_metadata": [
+    "action_label",
+    "prediction_confidence"
+  ],
+  "language": {
+    "required_levels": ["task", "atomic_action"],
+    "required_languages": ["zh", "en"]
+  },
+  "delivery": {
+    "canonical_format": "lerobot-v3",
+    "conversion_script_required_for_noncanonical_source": true,
+    "schema_document_required": true,
+    "evaluation_code_required": true,
+    "evaluation_results_required": true,
+    "overlay_videos_required": true,
+    "dataset_distribution_report_required": true,
+    "episode_extrinsics_must_not_be_replaced_by_global_constant": true
+  },
+  "reference_only_metrics": [
+    "depth_abs_rel",
+    "depth_sq_rel",
+    "depth_rmse",
+    "depth_rmse_log",
+    "depth_si_rmse",
+    "depth_scale_error",
+    "depth_delta_1",
+    "slam_ate",
+    "slam_rpe",
+    "pa_mpjpe",
+    "pck",
+    "auc_20_50mm",
+    "mano_beta_error",
+    "failure_rate",
+    "failed_frame_detection_rate",
+    "visual_diversity"
+  ]
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=EgoQC PostgreSQL human review service
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=egoqc
+WorkingDirectory=/srv/egoqc/app
+Environment=DATABASE_URL=postgresql:///egoqc?user=egoqc
+ExecStart=/srv/egoqc/app/.venv-review/bin/egoqc serve-postgres-review --evidence-root /srv/egoqc/results/review-evidence --host 127.0.0.1 --port 8767
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

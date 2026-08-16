@@ -1,0 +1,156 @@
+{
+  "standard_version": "egoqc-lite-0.5",
+  "video_key": "observation.images.ego",
+  "required_frame_columns": [
+    "index",
+    "frame_index",
+    "episode_index",
+    "task_index",
+    "main_type",
+    "timestamp",
+    "state_mask",
+    "observation.state",
+    "fov",
+    "intrinsics",
+    "extrinsics_w2c",
+    "left_transl_world",
+    "left_orient_world",
+    "left_hand_pose",
+    "left_kept",
+    "left_seg_start",
+    "left_seg_end",
+    "right_transl_world",
+    "right_orient_world",
+    "right_hand_pose",
+    "right_kept",
+    "right_seg_start",
+    "right_seg_end"
+  ],
+  "feature_schema": {
+    "action": {"dtype": "float64", "shape": [102]},
+    "observation.state": {"dtype": "float64", "shape": [122]},
+    "state_mask": {"dtype": "bool", "shape": [2]},
+    "fov": {"dtype": "float64", "shape": [2]},
+    "intrinsics": {"dtype": "float64", "shape": [9]},
+    "extrinsics_w2c": {"dtype": "float64", "shape": [16]},
+    "main_type": {"dtype": "int64", "shape": [1]},
+    "index": {"dtype": "int64", "shape": [1]},
+    "episode_index": {"dtype": "int64", "shape": [1]},
+    "task_index": {"dtype": "int64", "shape": [1]},
+    "frame_index": {"dtype": "int64", "shape": [1]},
+    "timestamp": {"dtype": "float64", "shape": [1]}
+  },
+  "storage_limits": {
+    "data_file_size_mb": 100,
+    "video_file_size_mb": 500,
+    "chunk_size": 1000
+  },
+  "required_episode_columns": [
+    "episode_index", "length", "tasks", "dataset_from_index", "dataset_to_index",
+    "data/chunk_index", "data/file_index",
+    "videos/observation.images.ego/chunk_index",
+    "videos/observation.images.ego/file_index",
+    "videos/observation.images.ego/from_timestamp",
+    "videos/observation.images.ego/to_timestamp"
+  ],
+  "frame_schema": {
+    "index": {"dtype": "int64", "shape": [1]},
+    "frame_index": {"dtype": "int64", "shape": [1]},
+    "episode_index": {"dtype": "int64", "shape": [1]},
+    "task_index": {"dtype": "int64", "shape": [1]},
+    "main_type": {"dtype": "int64", "shape": [1]},
+    "timestamp": {"dtype": "float64", "shape": [1]},
+    "state_mask": {"dtype": "bool", "shape": [2]},
+    "observation.state": {"dtype": "float64", "shape": [122]},
+    "fov": {"dtype": "float64", "shape": [2]},
+    "intrinsics": {"dtype": "float64", "shape": [9]},
+    "extrinsics_w2c": {"dtype": "float64", "shape": [16]},
+    "left_transl_world": {"dtype": "float64", "shape": [3]},
+    "left_orient_world": {"dtype": "float64", "shape": [9]},
+    "left_hand_pose": {"dtype": "float64", "shape": [135]},
+    "left_kept": {"dtype": "bool", "shape": [1]},
+    "left_seg_start": {"dtype": "int64", "shape": [1]},
+    "left_seg_end": {"dtype": "int64", "shape": [1]},
+    "right_transl_world": {"dtype": "float64", "shape": [3]},
+    "right_orient_world": {"dtype": "float64", "shape": [9]},
+    "right_hand_pose": {"dtype": "float64", "shape": [135]},
+    "right_kept": {"dtype": "bool", "shape": [1]},
+    "right_seg_start": {"dtype": "int64", "shape": [1]},
+    "right_seg_end": {"dtype": "int64", "shape": [1]}
+  },
+  "thresholds": {
+    "position_warning_m": 0.02,
+    "position_error_m": 0.05,
+    "rotation_warning_deg": 8.0,
+    "rotation_error_deg": 20.0,
+    "pose_repr_warning_deg": 2.0,
+    "pose_repr_error_deg": 5.0,
+    "so3_orthogonality_error": 0.001,
+    "so3_determinant_error": 0.001,
+    "beta_std_warning": 0.02,
+    "timestamp_tolerance_s": 0.002,
+    "minimum_valid_hand_ratio": 0.15,
+    "position_jitter_warning_m": 0.008,
+    "position_jitter_error_m": 0.020,
+    "rotation_jitter_warning_deg": 6.0,
+    "rotation_jitter_error_deg": 15.0,
+    "joint_jitter_warning_deg": 8.0,
+    "joint_jitter_error_deg": 20.0,
+    "position_spike_m": 0.025,
+    "rotation_spike_deg": 20.0,
+    "camera_jitter_warning_m": 0.015,
+    "camera_jitter_error_m": 0.030,
+    "camera_rotation_jitter_warning_deg": 3.0,
+    "camera_rotation_jitter_error_deg": 8.0
+  },
+  "temporal": {
+    "robust_z": 8.0,
+    "max_candidate_frames": 6,
+    "mask_flicker_max_frames": 3,
+    "freeze_position_step_m": 0.0002,
+    "freeze_joint_step_deg": 0.2,
+    "freeze_warning_frames": 90
+  },
+  "visibility": {
+    "maximum_internal_absence_s": 1.0,
+    "minimum_continuous_visible_s": 5.0
+  },
+  "repair": {
+    "position": {"min_cutoff": 6.0, "beta": 1.5, "derivative_cutoff": 1.0},
+    "rotation": {"min_cutoff": 6.0, "beta": 1.5, "derivative_cutoff": 1.0},
+    "minimum_motion_retention": 0.75,
+    "maximum_translation_correction_p99_mm": 30.0,
+    "maximum_rotation_correction_p99_deg": 8.0
+  },
+  "video_check": {
+    "mode": "header",
+    "sample_frames": 8,
+    "blur_laplacian_variance_min": 25.0,
+    "luma_mean_min": 20.0,
+    "luma_mean_max": 235.0,
+    "clipped_pixel_ratio_max": 0.85,
+    "bad_sample_ratio_warning": 0.5,
+    "frame_interval_jitter_mean_ms_max": 2.0,
+    "frame_interval_jitter_max_ms_max": 5.0,
+    "frame_interval_jitter_event_limit": 32
+  },
+  "acceptance": {
+    "motion_failure_decision": "rework"
+  },
+  "sampling": {
+    "quantiles": [0.0, 0.25, 0.5, 0.75, 1.0],
+    "kinematic_hotspots": 3,
+    "mask_transitions": 2,
+    "random_frames": 1,
+    "max_frames_per_episode": 12,
+    "seed": 17
+  },
+  "report": {
+    "max_episodes": 500
+  },
+  "estimation": {
+    "fallback_logical_throughput_mib_s": 250.0,
+    "file_overhead_s": 0.02,
+    "expected_warm_cache_hit_ratio": 0.70
+  }
+}

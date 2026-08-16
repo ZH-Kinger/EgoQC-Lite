@@ -1,0 +1,24 @@
+{
+  "profile_version": "generic-robot20-0.1",
+  "status": "example_retargeting_blocked",
+  "dof_per_hand": 20,
+  "joint_order_source": "URDF document order excluding fixed joints",
+  "left_urdf": "/path/to/robot-hand/left.urdf",
+  "right_urdf": "/path/to/robot-hand/right.urdf",
+  "limits_and_axes": "read_from_urdf",
+  "mesh_format": "STL",
+  "semantic_finger_mapping": {
+    "mano21_convention": "openpose_wrist_thumb_index_middle_ring_pinky",
+    "fingers": {
+      "thumb": {"mano21_indices": [1, 2, 3, 4], "robot_joint_indices": [0, 1, 2, 3]},
+      "index": {"mano21_indices": [5, 6, 7, 8], "robot_joint_indices": [4, 5, 6, 7]},
+      "middle": {"mano21_indices": [9, 10, 11, 12], "robot_joint_indices": [8, 9, 10, 11]},
+      "ring": {"mano21_indices": [13, 14, 15, 16], "robot_joint_indices": [12, 13, 14, 15]},
+      "pinky": {"mano21_indices": [17, 18, 19, 20], "robot_joint_indices": [16, 17, 18, 19]}
+    }
+  },
+  "retargeting": {
+    "enabled": false,
+    "blocked_on": ["retargeting_repository_or_interface"]
+  }
+}
