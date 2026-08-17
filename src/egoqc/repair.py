@@ -345,11 +345,24 @@ def write_repair_preview(
     repair_config = config.get("repair", {})
     repaired = repair_episode_records(original, fps, repair_config)
 
-    before, _, _ = analyze_temporal_quality(
-        *_arrays(original), fps, config, episode, str(route["data_path"])
+    source_timestamps = np.asarray(
+        [row["timestamp"] for row in original], dtype=np.float64
     )
-    after, _, _ = analyze_temporal_quality(
-        *_arrays(repaired), fps, config, episode, str(route["data_path"])
+    before, _, _, _ = analyze_temporal_quality(
+        *_arrays(original),
+        fps,
+        config,
+        episode,
+        str(route["data_path"]),
+        timestamps=source_timestamps,
+    )
+    after, _, _, _ = analyze_temporal_quality(
+        *_arrays(repaired),
+        fps,
+        config,
+        episode,
+        str(route["data_path"]),
+        timestamps=source_timestamps,
     )
     keys = [key for key in before if "jitter_p99" in key]
     reductions = {}

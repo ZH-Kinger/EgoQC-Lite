@@ -666,6 +666,29 @@ def run(
     effective_video_duration_s = sum(
         float(result.metrics.get("effective_video_duration_s", 0.0)) for result in results
     )
+    total_frames = sum(result.length for result in results)
+    bad_frame_rows = [
+        {
+            "episode_index": result.episode_index,
+            "nominal_time_s": float(event["frame_index"] / fps),
+            **event,
+        }
+        for result in results
+        for event in result.bad_frames
+    ]
+    unique_bad_frames = sum(
+        int(result.metrics.get("bad_frame_count", 0)) for result in results
+    )
+    bad_frame_summary = {
+        "bad_frame_count": unique_bad_frames,
+        "bad_frame_event_count": len(bad_frame_rows),
+        "total_frame_count": total_frames,
+        "bad_frame_ratio": (
+            unique_bad_frames / total_frames if total_frames else 0.0
+        ),
+        "events_jsonl": str(output / "bad_frames.jsonl"),
+        "events_parquet": str(output / "bad_frames.parquet"),
+    }
     visibility_summary = {
         "total_episode_duration_s": total_episode_duration_s,
         "qualified_visible_duration_s": qualified_visible_duration_s,
@@ -701,6 +724,7 @@ def run(
         "cache": cache_stats,
         "decisions": decision_summary,
         "visibility": visibility_summary,
+        "bad_frames": bad_frame_summary,
         "started_at": started_at,
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "elapsed_s": elapsed_s,
@@ -752,6 +776,7 @@ def run(
     ]
     write_jsonl(output / "episodes.jsonl", episode_rows)
     write_jsonl(output / "issues.jsonl", issue_rows)
+    write_jsonl(output / "bad_frames.jsonl", bad_frame_rows)
     write_jsonl(output / "videos.jsonl", video_records)
     write_jsonl(output / "shards.jsonl", shard_records)
     write_parquet(
@@ -773,6 +798,13 @@ def run(
                     allow_nan=True,
                 ),
                 "sample_frames": result.sample_frames,
+                "bad_frame_count": int(result.metrics.get("bad_frame_count", 0)),
+                "bad_frame_ratio": float(result.metrics.get("bad_frame_ratio", 0.0)),
+                "bad_frames_json": json.dumps(
+                    result.bad_frames,
+                    ensure_ascii=False,
+                    allow_nan=True,
+                ),
             }
             for result in results
         ],
@@ -795,6 +827,7 @@ def run(
             for issue in issue_rows
         ],
     )
+    write_parquet(output / "bad_frames.parquet", bad_frame_rows)
     write_parquet(output / "videos.parquet", video_records)
     write_parquet(output / "shards.parquet", shard_records)
     write_jsonl(output / "sample_plan.jsonl", [

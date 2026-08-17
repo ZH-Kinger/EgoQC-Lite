@@ -53,6 +53,29 @@ def _severity(value: float, warning: float, error: float) -> str:
     return "info"
 
 
+def _frame_event(
+    frame_index: int,
+    code: str,
+    severity: str,
+    file_name: str,
+    *,
+    side: Optional[str] = None,
+    measured: Optional[float] = None,
+    threshold: Optional[float] = None,
+    unit: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "frame_index": int(frame_index),
+        "code": code,
+        "severity": severity,
+        "side": side,
+        "measured": measured,
+        "threshold": threshold,
+        "unit": unit,
+        "file": file_name,
+    }
+
+
 def _true_runs(mask: np.ndarray) -> List[Tuple[int, int]]:
     """Return half-open [start, end) runs without per-frame Python iteration."""
     values = np.asarray(mask, dtype=bool).reshape(-1)
@@ -356,9 +379,27 @@ def validate_episode(
 
     timestamp = _arrays(ep, "timestamp").reshape(-1)
     expected_time = frame_index / fps
-    timestamp_error = float(np.nanmax(np.abs(timestamp - expected_time)))
+    nominal_errors = np.abs(timestamp - expected_time)
+    timestamp_error = float(np.nanmax(nominal_errors))
     result.metrics["timestamp_max_error_s"] = timestamp_error
-    if timestamp_error > config["thresholds"]["timestamp_tolerance_s"]:
+    result.metrics["label_nominal_alignment_error_max_ms"] = timestamp_error * 1000.0
+    result.metrics["time_alignment_error_max_ms"] = None
+    result.metrics["time_alignment_status"] = "not_measurable_without_video_pts"
+    timestamp_tolerance = float(config["thresholds"]["timestamp_tolerance_s"])
+    timestamp_bad = np.isfinite(nominal_errors) & (nominal_errors > timestamp_tolerance)
+    for frame in np.flatnonzero(timestamp_bad):
+        result.bad_frames.append(
+            _frame_event(
+                int(frame),
+                "timestamp_mismatch",
+                "warning",
+                file_name,
+                measured=float(nominal_errors[frame] * 1000.0),
+                threshold=timestamp_tolerance * 1000.0,
+                unit="ms",
+            )
+        )
+    if timestamp_error > timestamp_tolerance:
         result.issues.append(
             Issue(
                 "timestamp_mismatch",
@@ -366,8 +407,90 @@ def validate_episode(
                 f"timestamp 最大误差 {timestamp_error:.6f}s",
                 episode_index,
                 file_name,
+                {
+                    "frames": [int(value) for value in np.flatnonzero(timestamp_bad)[:32]],
+                    "measured_ms": timestamp_error * 1000.0,
+                    "threshold_ms": timestamp_tolerance * 1000.0,
+                    "basis": "frame_index/fps nominal timeline",
+                },
             )
         )
+
+    timing = config.get("timing", config.get("video_check", {}))
+    jitter_mean_limit_ms = float(timing.get("frame_interval_jitter_mean_ms_max", 2.0))
+    jitter_max_limit_ms = float(timing.get("frame_interval_jitter_max_ms_max", 5.0))
+    gaps = np.diff(timestamp)
+    ideal_gap = 1.0 / fps
+    positive = np.isfinite(gaps) & (gaps > 0)
+    gap_jitter_ms = np.full(gaps.shape, np.nan, dtype=np.float64)
+    gap_jitter_ms[positive] = np.abs(gaps[positive] - ideal_gap) * 1000.0
+    finite_jitter = gap_jitter_ms[np.isfinite(gap_jitter_ms)]
+    jitter_mean_ms = float(np.mean(finite_jitter)) if finite_jitter.size else None
+    jitter_max_ms = float(np.max(finite_jitter)) if finite_jitter.size else None
+    non_monotonic = np.flatnonzero(np.isfinite(gaps) & (gaps <= 0)) + 1
+    jitter_frames = np.flatnonzero(
+        np.isfinite(gap_jitter_ms) & (gap_jitter_ms > jitter_max_limit_ms)
+    ) + 1
+    result.metrics["numeric_timestamp_gap_count"] = int(finite_jitter.size)
+    result.metrics["numeric_timestamp_non_monotonic_count"] = int(len(non_monotonic))
+    result.metrics["numeric_frame_interval_jitter_mean_ms"] = jitter_mean_ms
+    result.metrics["numeric_frame_interval_jitter_max_ms"] = jitter_max_ms
+    if (
+        jitter_mean_ms is not None
+        and jitter_max_ms is not None
+        and (jitter_mean_ms > jitter_mean_limit_ms or jitter_max_ms > jitter_max_limit_ms)
+    ):
+        result.issues.append(
+            Issue(
+                "numeric_frame_interval_jitter",
+                "error",
+                f"数值标注帧间隔抖动 mean={jitter_mean_ms:.3f}ms max={jitter_max_ms:.3f}ms",
+                episode_index,
+                file_name,
+                {
+                    "frames": [int(value) for value in jitter_frames[:32]],
+                    "mean_ms": jitter_mean_ms,
+                    "max_ms": jitter_max_ms,
+                    "mean_limit_ms": jitter_mean_limit_ms,
+                    "max_limit_ms": jitter_max_limit_ms,
+                },
+            )
+        )
+    for frame in jitter_frames:
+        result.bad_frames.append(
+            _frame_event(
+                int(frame),
+                "numeric_frame_interval_jitter",
+                "error",
+                file_name,
+                measured=float(gap_jitter_ms[int(frame) - 1]),
+                threshold=jitter_max_limit_ms,
+                unit="ms",
+            )
+        )
+    if len(non_monotonic):
+        result.issues.append(
+            Issue(
+                "numeric_non_monotonic_timestamps",
+                "error",
+                f"数值标注有 {len(non_monotonic)} 个非递增 timestamp",
+                episode_index,
+                file_name,
+                {"frames": [int(value) for value in non_monotonic[:32]]},
+            )
+        )
+        for frame in non_monotonic:
+            result.bad_frames.append(
+                _frame_event(
+                    int(frame),
+                    "numeric_non_monotonic_timestamps",
+                    "error",
+                    file_name,
+                    measured=float(gaps[int(frame) - 1] * 1000.0),
+                    threshold=0.0,
+                    unit="ms gap",
+                )
+            )
 
     if task_map is not None:
         episode_task_indices = set(
@@ -423,6 +546,20 @@ def validate_episode(
         + np.count_nonzero(right_kept != state_mask[:, 1])
     )
     result.metrics["kept_mask_mismatch_count"] = kept_mismatch
+    for side, mismatch in (
+        ("left", left_kept != state_mask[:, 0]),
+        ("right", right_kept != state_mask[:, 1]),
+    ):
+        for frame in np.flatnonzero(mismatch):
+            result.bad_frames.append(
+                _frame_event(
+                    int(frame),
+                    "kept_mask_mismatch",
+                    "error",
+                    file_name,
+                    side=side,
+                )
+            )
     if kept_mismatch:
         result.issues.append(
             Issue(
@@ -440,6 +577,32 @@ def validate_episode(
     visibility = analyze_hand_visibility(state_mask, fps, minimum_continuous_s)
     result.metrics.update(visibility)
     if visibility["longest_internal_hand_missing_gap_s"] > maximum_absence_s:
+        visible = np.any(state_mask, axis=1)
+        visible_runs = _true_runs(visible)
+        missing_runs = _true_runs(~visible)
+        first_visible = visible_runs[0][0] if visible_runs else None
+        last_visible = visible_runs[-1][1] if visible_runs else None
+        excessive_missing_runs = [
+            (start, end)
+            for start, end in missing_runs
+            if first_visible is not None
+            and start > first_visible
+            and end < last_visible
+            and (end - start) / fps > maximum_absence_s
+        ]
+        for start, end in excessive_missing_runs:
+            for frame in range(start, end):
+                result.bad_frames.append(
+                    _frame_event(
+                        frame,
+                        "hand_out_of_view_too_long",
+                        "error",
+                        file_name,
+                        measured=(end - start) / fps,
+                        threshold=maximum_absence_s,
+                        unit="s",
+                    )
+                )
         result.issues.append(
             Issue(
                 "hand_out_of_view_too_long",
@@ -490,17 +653,25 @@ def validate_episode(
                 )
             )
 
-    finite_ratio = float(
-        np.mean(
-            np.isfinite(state).all(axis=1)
-            & np.isfinite(intrinsics).all(axis=1)
-            & np.isfinite(extr).all(axis=(1, 2))
-            & np.isfinite(left_world).all(axis=1)
-            & np.isfinite(right_world).all(axis=1)
-        )
+    finite_frames = (
+        np.isfinite(state).all(axis=1)
+        & np.isfinite(intrinsics).all(axis=1)
+        & np.isfinite(extr).all(axis=(1, 2))
+        & np.isfinite(left_world).all(axis=1)
+        & np.isfinite(right_world).all(axis=1)
     )
+    finite_ratio = float(np.mean(finite_frames))
     result.metrics["finite_frame_ratio"] = finite_ratio
     if finite_ratio < 1.0:
+        for frame in np.flatnonzero(~finite_frames):
+            result.bad_frames.append(
+                _frame_event(
+                    int(frame),
+                    "non_finite_values",
+                    "error",
+                    file_name,
+                )
+            )
         result.issues.append(
             Issue("non_finite_values", "error", f"有限值帧比例 {finite_ratio:.3%}", episode_index, file_name)
         )
@@ -524,6 +695,22 @@ def validate_episode(
         orth_p99 > config["thresholds"]["so3_orthogonality_error"]
         or det_p99 > config["thresholds"]["so3_determinant_error"]
     ):
+        invalid_rotation_frames = np.flatnonzero(
+            np.any(
+                (orth > config["thresholds"]["so3_orthogonality_error"])
+                | (det > config["thresholds"]["so3_determinant_error"]),
+                axis=1,
+            )
+        )
+        for frame in invalid_rotation_frames:
+            result.bad_frames.append(
+                _frame_event(
+                    int(frame),
+                    "invalid_rotation_matrix",
+                    "error",
+                    file_name,
+                )
+            )
         result.issues.append(
             Issue(
                 "invalid_rotation_matrix",
@@ -570,6 +757,22 @@ def validate_episode(
                     file_name,
                 )
             )
+        valid_indices = np.flatnonzero(valid)
+        for local_index in np.flatnonzero(
+            np.isfinite(pos_error) & (pos_error > config["thresholds"]["position_error_m"])
+        ):
+            result.bad_frames.append(
+                _frame_event(
+                    int(valid_indices[local_index]),
+                    "world_camera_position_mismatch",
+                    "error",
+                    file_name,
+                    side=side,
+                    measured=float(pos_error[local_index]),
+                    threshold=float(config["thresholds"]["position_error_m"]),
+                    unit="m",
+                )
+            )
 
         expected_rot = camera_rotation @ orient
         stored_rot = euler_xyz_to_matrix(stored_euler)
@@ -589,6 +792,21 @@ def validate_episode(
                     f"{side} wrist 旋转误差 p95={rot_p95:.2f}°",
                     episode_index,
                     file_name,
+                )
+            )
+        for local_index in np.flatnonzero(
+            np.isfinite(rot_error) & (rot_error > config["thresholds"]["rotation_error_deg"])
+        ):
+            result.bad_frames.append(
+                _frame_event(
+                    int(valid_indices[local_index]),
+                    "world_camera_rotation_mismatch",
+                    "error",
+                    file_name,
+                    side=side,
+                    measured=float(rot_error[local_index]),
+                    threshold=float(config["thresholds"]["rotation_error_deg"]),
+                    unit="degree",
                 )
             )
 
@@ -611,6 +829,23 @@ def validate_episode(
                     file_name,
                 )
             )
+        pose_frame_error = np.max(pose_error, axis=1)
+        for local_index in np.flatnonzero(
+            np.isfinite(pose_frame_error)
+            & (pose_frame_error > config["thresholds"]["pose_repr_error_deg"])
+        ):
+            result.bad_frames.append(
+                _frame_event(
+                    int(valid_indices[local_index]),
+                    "pose_representation_mismatch",
+                    "error",
+                    file_name,
+                    side=side,
+                    measured=float(pose_frame_error[local_index]),
+                    threshold=float(config["thresholds"]["pose_repr_error_deg"]),
+                    unit="degree",
+                )
+            )
 
         beta_std = float(np.nanmax(np.nanstd(betas, axis=0)))
         result.metrics[f"{side}_beta_max_std"] = beta_std
@@ -619,7 +854,7 @@ def validate_episode(
                 Issue("beta_drift", "warning", f"{side} MANO betas 最大 std={beta_std:.4f}", episode_index, file_name)
             )
 
-    temporal_metrics, temporal_issues, temporal_frames = analyze_temporal_quality(
+    temporal_metrics, temporal_issues, temporal_frames, temporal_bad_frames = analyze_temporal_quality(
         left_world,
         right_world,
         left_orient,
@@ -632,9 +867,44 @@ def validate_episode(
         config,
         episode_index,
         file_name,
+        timestamps=timestamp,
     )
     result.metrics.update(temporal_metrics)
     result.issues.extend(temporal_issues)
+    result.bad_frames.extend(temporal_bad_frames)
+    result.bad_frames.sort(
+        key=lambda event: (
+            int(event["frame_index"]),
+            str(event["code"]),
+            str(event.get("side") or ""),
+        )
+    )
+    bad_frame_indices = sorted(
+        {int(event["frame_index"]) for event in result.bad_frames}
+    )
+    bad_frame_ratio = float(len(bad_frame_indices) / n)
+    result.metrics["bad_frame_count"] = len(bad_frame_indices)
+    result.metrics["bad_frame_event_count"] = len(result.bad_frames)
+    result.metrics["bad_frame_ratio"] = bad_frame_ratio
+    bad_frame_ratio_limit = float(
+        config.get("timing", {}).get("bad_frame_ratio_max", 0.03)
+    )
+    if bad_frame_ratio >= bad_frame_ratio_limit:
+        result.issues.append(
+            Issue(
+                "bad_frame_ratio_exceeded",
+                "error",
+                f"坏帧比例 {bad_frame_ratio:.3%}，要求低于 {bad_frame_ratio_limit:.3%}",
+                episode_index,
+                file_name,
+                {
+                    "bad_frame_count": len(bad_frame_indices),
+                    "total_frame_count": n,
+                    "ratio": bad_frame_ratio,
+                    "limit": bad_frame_ratio_limit,
+                },
+            )
+        )
     result.sample_frames = select_sample_frames(
         n,
         config["sampling"],
@@ -643,7 +913,7 @@ def validate_episode(
         state_mask,
         fps,
         episode_index,
-        temporal_frames,
+        list(dict.fromkeys(temporal_frames + bad_frame_indices)),
     )
     result.tier = classify(result.issues)
     return result

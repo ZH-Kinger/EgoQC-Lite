@@ -60,6 +60,9 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(live_status["status"], "succeeded")
             self.assertEqual(live_status["fraction"], 1.0)
             self.assertTrue((output / "decisions" / "episode_decisions.parquet").exists())
+            self.assertTrue((output / "bad_frames.jsonl").exists())
+            self.assertTrue((output / "bad_frames.parquet").exists())
+            self.assertEqual(summary["bad_frames"]["bad_frame_count"], 0)
             self.assertTrue((output / "decisions" / "review_manifest.jsonl").exists())
             decisions = (output / "decisions" / "episode_decisions.jsonl").read_text()
             self.assertIn('"decision": "accept"', decisions)
@@ -125,6 +128,34 @@ class PipelineTests(unittest.TestCase):
             self.assertIn("world_camera_position_mismatch", issues)
             rejected = (output / "decisions" / "reject_manifest.jsonl").read_text()
             self.assertIn('"decision": "reject"', rejected)
+
+    def test_timestamp_jitter_emits_bad_frame_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = create_fixture(Path(temporary) / "dataset")
+            data_path = root / "data" / "chunk-000" / "file-000.parquet"
+            table = pq.read_table(data_path)
+            timestamps = np.asarray(table["timestamp"].to_pylist(), dtype=np.float64)
+            timestamps[5] += 0.020
+            table = table.set_column(
+                table.schema.get_field_index("timestamp"),
+                "timestamp",
+                pa.array(timestamps),
+            )
+            pq.write_table(table, data_path)
+            output = Path(temporary) / "quality"
+            config = json.loads(
+                (Path(__file__).parents[1] / "config" / "default.json").read_text()
+            )
+            summary = run(root, output, config)
+            events = [
+                json.loads(line)
+                for line in (output / "bad_frames.jsonl").read_text().splitlines()
+                if line.strip()
+            ]
+            self.assertGreater(summary["bad_frames"]["bad_frame_count"], 0)
+            self.assertTrue(any(event["code"] == "numeric_frame_interval_jitter" for event in events))
+            issues = (output / "issues.jsonl").read_text()
+            self.assertIn("bad_frame_ratio_exceeded", issues)
 
     def test_multi_episode_shard_is_grouped_once(self):
         with tempfile.TemporaryDirectory() as temporary:

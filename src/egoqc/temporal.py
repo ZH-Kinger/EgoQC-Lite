@@ -107,6 +107,61 @@ def _longest_true_run(values: np.ndarray) -> int:
     return int(longest)
 
 
+def _velocity_statistics(
+    points: np.ndarray,
+    valid: np.ndarray,
+    timestamps: np.ndarray,
+) -> Tuple[np.ndarray, float, float, float]:
+    """Return per-frame segment speeds and the contractual median+3*MAD limit."""
+
+    points = np.asarray(points, dtype=np.float64)
+    valid = np.asarray(valid, dtype=bool)
+    timestamps = np.asarray(timestamps, dtype=np.float64).reshape(-1)
+    speeds = np.full(len(points), np.nan, dtype=np.float64)
+    if len(points) < 2:
+        return speeds, float("nan"), float("nan"), float("nan")
+    dt = np.diff(timestamps)
+    pair_valid = (
+        valid[:-1]
+        & valid[1:]
+        & np.isfinite(points[:-1]).all(axis=1)
+        & np.isfinite(points[1:]).all(axis=1)
+        & np.isfinite(dt)
+        & (dt > 0)
+    )
+    step = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    speeds[1:] = np.where(pair_valid, step / np.where(dt > 0, dt, np.nan), np.nan)
+    finite = speeds[np.isfinite(speeds)]
+    if not finite.size:
+        return speeds, float("nan"), float("nan"), float("nan")
+    median = float(np.median(finite))
+    mad = float(np.median(np.abs(finite - median)))
+    return speeds, median, mad, median + 3.0 * mad
+
+
+def _bad_frame(
+    frame_index: int,
+    code: str,
+    severity: str,
+    file_name: str,
+    *,
+    side: str | None = None,
+    measured: float | None = None,
+    threshold: float | None = None,
+    unit: str | None = None,
+) -> Dict[str, Any]:
+    return {
+        "frame_index": int(frame_index),
+        "code": code,
+        "severity": severity,
+        "side": side,
+        "measured": measured,
+        "threshold": threshold,
+        "unit": unit,
+        "file": file_name,
+    }
+
+
 def analyze_temporal_quality(
     left_world: np.ndarray,
     right_world: np.ndarray,
@@ -120,7 +175,8 @@ def analyze_temporal_quality(
     config: Dict[str, Any],
     episode_index: int,
     file_name: str,
-) -> Tuple[Dict[str, Any], List[Issue], List[int]]:
+    timestamps: np.ndarray | None = None,
+) -> Tuple[Dict[str, Any], List[Issue], List[int], List[Dict[str, Any]]]:
     """Cheap temporal QC over Parquet arrays; never decodes video."""
 
     thresholds = config.get("thresholds", {})
@@ -130,6 +186,11 @@ def analyze_temporal_quality(
     metrics: Dict[str, Any] = {}
     issues: List[Issue] = []
     candidate_scores: Dict[int, float] = {}
+    bad_frames: List[Dict[str, Any]] = []
+    if timestamps is None:
+        timestamps = np.arange(len(left_world), dtype=np.float64) / fps
+    else:
+        timestamps = np.asarray(timestamps, dtype=np.float64).reshape(-1)
 
     sides = (
         ("left", left_world, left_orient, left_pose, np.asarray(state_mask)[:, 0]),
@@ -201,6 +262,15 @@ def analyze_temporal_quality(
                 )
             )
             for frame in spike_frames:
+                bad_frames.append(
+                    _bad_frame(
+                        int(frame),
+                        "temporal_spike",
+                        "error",
+                        file_name,
+                        side=side,
+                    )
+                )
                 candidate_scores[int(frame)] = max(
                     candidate_scores.get(int(frame), 0.0),
                     float(np.nan_to_num(position_residual[frame]) * 1000.0)
@@ -223,6 +293,65 @@ def analyze_temporal_quality(
             )
             for frame in frames:
                 candidate_scores[frame] = max(candidate_scores.get(frame, 0.0), 1000.0)
+            for start, end in flickers:
+                for frame in range(start, end + 1):
+                    bad_frames.append(
+                        _bad_frame(
+                            frame,
+                            "mask_flicker",
+                            "warning",
+                            file_name,
+                            side=side,
+                        )
+                    )
+
+        speeds, speed_median, speed_mad, speed_limit = _velocity_statistics(
+            position, valid, timestamps
+        )
+        metrics[f"{side}_velocity_median_m_s"] = speed_median
+        metrics[f"{side}_velocity_mad_m_s"] = speed_mad
+        metrics[f"{side}_velocity_limit_m_s"] = speed_limit
+        velocity_outliers = (
+            np.isfinite(speeds)
+            & np.isfinite(speed_limit)
+            & (speeds > speed_limit + max(1e-12, abs(speed_limit) * 1e-12))
+        )
+        velocity_frames = np.flatnonzero(velocity_outliers)
+        metrics[f"{side}_velocity_outlier_count"] = int(len(velocity_frames))
+        metrics[f"{side}_velocity_outlier_ratio"] = float(np.mean(velocity_outliers))
+        if len(velocity_frames):
+            issues.append(
+                Issue(
+                    "instantaneous_velocity_outlier",
+                    "error",
+                    f"{side} 有 {len(velocity_frames)} 帧速度不满足 median(V)+3×MAD",
+                    episode_index,
+                    file_name,
+                    {
+                        "frames": [int(value) for value in velocity_frames[:32]],
+                        "median_m_s": speed_median,
+                        "mad_m_s": speed_mad,
+                        "limit_m_s": speed_limit,
+                    },
+                )
+            )
+            for frame in velocity_frames:
+                bad_frames.append(
+                    _bad_frame(
+                        int(frame),
+                        "instantaneous_velocity_outlier",
+                        "error",
+                        file_name,
+                        side=side,
+                        measured=float(speeds[frame]),
+                        threshold=float(speed_limit),
+                        unit="m/s",
+                    )
+                )
+                candidate_scores[int(frame)] = max(
+                    candidate_scores.get(int(frame), 0.0),
+                    float(speeds[frame]),
+                )
 
         if len(position) > 1:
             translation_step = np.linalg.norm(np.diff(position, axis=0), axis=1)
@@ -275,4 +404,4 @@ def analyze_temporal_quality(
         )
 
     ranked = sorted(candidate_scores, key=lambda frame: candidate_scores[frame], reverse=True)
-    return metrics, issues, ranked[:max_candidates]
+    return metrics, issues, ranked[:max_candidates], bad_frames

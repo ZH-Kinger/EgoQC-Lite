@@ -30,15 +30,15 @@ V3.0 允许供应商采用以下两种世界系，交付时必须声明：
 |---|---|---|
 | LeRobot v3 结构与 Schema | 已实现 | 结构、dtype、shape、路由硬门禁 |
 | FPS、分辨率、视频可解码 | 已实现 | header/count/sample-quality |
-| 帧间隔 Jitter | 部分实现 | 当前检查 timestamp 理想轴；需新增 mean/max ms 专项字段 |
-| Et 图像/标注同步 | 部分实现 | 共享 timestamp 时可测；独立时间轴需 adapter 提供 |
-| Vt + 3MAD | 部分实现 | 已有 robust spike；需增加合同指定的显式速度结果 |
+| 帧间隔 Jitter | 已实现 | 数值 label timestamp 与视频 PTS 分别输出 mean/max ms、非递增计数与异常帧 |
+| Et 图像/标注同步 | 部分实现 | label 对名义轴已输出；没有逐帧视频 PTS 时 `time_alignment_error_max_ms=null`，不伪判通过 |
+| Vt + 3MAD | 已实现 | 使用逐帧 timestamp dt 计算速度，输出 median、MAD、limit、异常帧与左右手比例 |
 | 时序抖动和瞬移 | 已实现 | wrist/joint/camera 局部残差 p99 与孤立跳点 |
 | MANO 重投影目视证据 | 已实现 | 原图、mesh、骨骼、标注视频和人工复检 |
 | 单轴/三轴旋转参考误差 | 待参考 | 无人工/GT 参考时为 null |
 | MPJPE 与各指尖 MPJPE | 待 GT | 无 3D GT 时为 null |
 | ODSR Micro-F1 | 待 Gold Set | 需要人工遮挡真值，不能用 valid rate 替代 |
-| 坏帧比例与坏帧清单 | 部分实现 | 已有模糊/曝光抽样，需扩展完整坏帧定义 |
+| 坏帧比例与坏帧清单 | 核心实现 | `bad_frames.jsonl/parquet` 覆盖数值、几何、时序和长时离开视野；模糊/曝光仍是视频抽样候选 |
 | 中英文 Distinct-2 | 待实现 | 按 Qwen2-0.5B tokenizer 固定版本计算 |
 | Pairwise Distance | 待实现 | TF-IDF 1-2gram、词表5000、固定随机种子 |
 | 语义标注准确率 | 待人工抽检 | 至少记录样本 manifest、审核人和混淆原因 |

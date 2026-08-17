@@ -135,6 +135,12 @@ def write_report(
                     "right_joint_rotation_jitter_p99_deg",
                     "camera_translation_jitter_p99_mm",
                     "camera_rotation_jitter_p99_deg",
+                    "bad_frame_count",
+                    "bad_frame_ratio",
+                    "numeric_frame_interval_jitter_mean_ms",
+                    "numeric_frame_interval_jitter_max_ms",
+                    "left_velocity_outlier_ratio",
+                    "right_velocity_outlier_ratio",
                 }
             },
         }
@@ -157,6 +163,9 @@ def write_report(
     visibility = summary.get("visibility", {})
     effective_hours = float(visibility.get("effective_video_hours", 0.0))
     effective_ratio = float(visibility.get("effective_utilization_ratio", 0.0))
+    bad_frames = summary.get("bad_frames", {})
+    bad_frame_count = int(bad_frames.get("bad_frame_count", 0))
+    bad_frame_ratio = float(bad_frames.get("bad_frame_ratio", 0.0))
     document = f"""<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -204,6 +213,8 @@ button{{cursor:pointer}} button.active{{background:var(--ink);color:#fff;border-
 <div class="card"><span>拒绝 / 隔离</span><b>{rejected_count:,}</b></div>
 <div class="card"><span>有效视频</span><b>{effective_hours:.2f}<small> h</small></b></div>
 <div class="card"><span>有效时长率</span><b>{effective_ratio:.1%}</b></div>
+<div class="card"><span>坏帧</span><b>{bad_frame_count:,}</b></div>
+<div class="card"><span>坏帧比例</span><b>{bad_frame_ratio:.2%}</b></div>
 <div class="card"><span>逻辑吞吐</span><b>{throughput:.1f}<small> MiB/s</small></b></div>
 </section>
 <div class="tier-strip" aria-label="质量等级分布">{tier_segments}</div>

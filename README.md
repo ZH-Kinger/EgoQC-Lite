@@ -54,6 +54,9 @@ VITRA `.pth`、视频清洗、原子动作切分、MANO108/Robot20 与 GR00T 训
 - MANO betas 跨帧漂移、有效率和最长缺失段。
 - 位置、腕部旋转、15 个手指关节及相机外参的时序抖动检测。
 - 孤立跳点、短时 mask 闪烁和 pose freeze 候选检测。
+- 按逐帧 timestamp `dt` 计算左右手速度及 `median(V)+3×MAD`。
+- 数值 timestamp 帧间隔 jitter、非递增检测和名义时间轴对齐误差。
+- 逐帧错误事件、去重坏帧比例和 3% 合同门禁。
 - 基于轨迹加速度、mask 切换和固定分位点的视觉抽帧计划。
 - PyAV 视频三级探测：header、准确计帧、分层抽样清晰度/曝光检查。
 - 连续有效段内的 One-Euro 位置修复和 SO(3) 自适应 SLERP 修复预览。
@@ -361,12 +364,18 @@ quality-result/
 ├── summary.json
 ├── episodes.jsonl
 ├── issues.jsonl
+├── bad_frames.jsonl
+├── bad_frames.parquet
 ├── videos.jsonl
 ├── sample_plan.jsonl
 └── report.html
 ```
 
 打开 `report.html` 即可查看 episode 分级、问题原因和第二阶段视觉抽帧计划。
+`bad_frames` 每行包含 `episode_index/frame_index/code/side/measured/threshold/unit`，
+可直接用于供应商返工、异常点视频烧录和人工分层抽检。对于真实视频—标注
+Et，如果未提供逐帧视频 PTS，则输出 `null` 和不可测原因，不使用
+`frame_index/fps` 代替真实同步精度。
 
 ## OSS / CPFS 挂载目录管线
 

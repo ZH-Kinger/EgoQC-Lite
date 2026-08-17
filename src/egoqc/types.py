@@ -29,6 +29,7 @@ class EpisodeResult:
     metrics: Dict[str, Any] = field(default_factory=dict)
     issues: List[Issue] = field(default_factory=list)
     sample_frames: List[int] = field(default_factory=list)
+    bad_frames: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -38,6 +39,7 @@ class EpisodeResult:
             "metrics": self.metrics,
             "issues": [issue.to_dict() for issue in self.issues],
             "sample_frames": self.sample_frames,
+            "bad_frames": self.bad_frames,
         }
 
     @classmethod
@@ -49,4 +51,5 @@ class EpisodeResult:
             metrics=value.get("metrics", {}),
             issues=[Issue.from_dict(issue) for issue in value.get("issues", [])],
             sample_frames=[int(frame) for frame in value.get("sample_frames", [])],
+            bad_frames=list(value.get("bad_frames", [])),
         )

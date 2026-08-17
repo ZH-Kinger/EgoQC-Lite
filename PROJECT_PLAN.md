@@ -68,9 +68,10 @@
 - [x] 建立现有实现覆盖矩阵与 EgoDex 初步差距分析。
 - [x] 实现 EgoDex HDF5/MP4 只读 adapter、CanonicalEpisode 与 capability manifest。
 - [x] 实现 RekaDaily raw metadata-first adapter、视频-only 能力门禁与 PTS jitter 事件清单。
-- [ ] 增加数值标注 timestamp Jitter、Et 与 Vt+3MAD 输出（视频 PTS jitter 已实现）。
+- [x] 增加数值标注 timestamp Jitter 与按逐帧 dt 计算的 Vt+3MAD 输出。
+- [ ] 将视频逐帧 PTS 按 episode offset 与 label timestamp 对齐，输出真实 Et；当前无 PTS 时显式标记为不可测。
 - [x] 增加首个手部有效帧、任务内离开视野时长和连续 5 秒后的有效视频时长计算（第一有效相机帧仍需背景特征置信度）。
-- [ ] 增加坏帧清单与坏帧比例统计。
+- [x] 增加数值/几何/时序坏帧清单与去重坏帧比例统计。
 - [ ] 增加中英文 Distinct-2、Pairwise Distance 和语义人工抽检 manifest。
 - [ ] 接入 ODSR/MPJPE Gold Set 后计算 Micro-F1 与各指尖 MPJPE。
 - [ ] 生成采购方三结论报告：合格、限期整改、不合格。

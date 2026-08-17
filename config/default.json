@@ -1,5 +1,5 @@
 {
-  "standard_version": "egoqc-lite-0.5",
+  "standard_version": "egoqc-lite-0.6",
   "video_key": "observation.images.ego",
   "required_frame_columns": [
     "index",
@@ -133,6 +133,12 @@
     "frame_interval_jitter_mean_ms_max": 2.0,
     "frame_interval_jitter_max_ms_max": 5.0,
     "frame_interval_jitter_event_limit": 32
+  },
+  "timing": {
+    "frame_interval_jitter_mean_ms_max": 2.0,
+    "frame_interval_jitter_max_ms_max": 5.0,
+    "bad_frame_ratio_max": 0.03,
+    "time_alignment_error_max_ms": 5.0
   },
   "acceptance": {
     "motion_failure_decision": "rework"

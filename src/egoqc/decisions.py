@@ -65,6 +65,9 @@ NUMERIC_CODES = {
     "world_camera_rotation_mismatch",
     "pose_representation_mismatch",
     "beta_drift",
+    "numeric_frame_interval_jitter",
+    "numeric_non_monotonic_timestamps",
+    "bad_frame_ratio_exceeded",
 }
 
 MOTION_CODES = {
@@ -79,6 +82,7 @@ MOTION_CODES = {
     "low_valid_ratio",
     "hand_out_of_view_too_long",
     "insufficient_continuous_hand_visibility",
+    "instantaneous_velocity_outlier",
 }
 
 FIT_CODES = {
@@ -144,6 +148,8 @@ def episode_manifest_row(
         "issue_codes": sorted({issue["code"] for issue in issues}),
         "files": files,
         "sample_frames": result.sample_frames,
+        "bad_frame_count": int(result.metrics.get("bad_frame_count", 0)),
+        "bad_frame_ratio": float(result.metrics.get("bad_frame_ratio", 0.0)),
         "standard_version": config["standard_version"],
         "config_hash": config_hash(config),
     }
