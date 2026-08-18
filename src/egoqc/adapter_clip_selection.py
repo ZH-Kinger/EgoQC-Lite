@@ -28,6 +28,7 @@ def plan_adapter_clips(
     window_s: float = 6.0,
     maximum_clips: Optional[int] = 3,
     confidence_threshold: float = 0.5,
+    visual_source: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Create bounded visual-teacher requests from a canonical readonly adapter."""
 
@@ -45,6 +46,9 @@ def plan_adapter_clips(
         raise ValueError("该 adapter 尚未提供 CanonicalEpisode，不能生成教师队列")
     video = canonical.get("video") or {}
     source_uri = str(video.get("path") or "")
+    evidence_uri = str(visual_source.expanduser().resolve()) if visual_source else source_uri
+    if visual_source and not visual_source.expanduser().resolve().is_file():
+        raise FileNotFoundError(f"visual source 不存在: {evidence_uri}")
     duration_s = float(canonical.get("duration_s") or 0.0)
     if not source_uri or duration_s <= 0:
         raise ValueError("CanonicalEpisode 缺少视频路径或有效时长")
@@ -77,10 +81,14 @@ def plan_adapter_clips(
             "clip_id": request_id,
             "episode_id": canonical["episode_id"],
             "source_format": canonical.get("source_format"),
-            "source_uri": source_uri,
+            "source_uri": evidence_uri,
+            "raw_source_uri": source_uri,
             "clip_start_s": start_s,
             "clip_end_s": end_s,
             "selection_source": "adapter_uniform_control",
+            "task_context": canonical.get("labels") or {},
+            "capability_context": canonical.get("capabilities") or {},
+            "visual_evidence": "annotation_overlay" if visual_source else "raw_video",
             "labels": canonical.get("labels") or {},
             "capabilities": canonical.get("capabilities") or {},
             "provenance": {"raw_immutable": True, "code_version": code_version()},
@@ -89,13 +97,17 @@ def plan_adapter_clips(
             "request_id": request_id,
             "schema_version": "egoqc-visual-teacher-request-v1",
             "prompt_version": "egoqc-visual-teacher-v3-open-world",
-            "source_uri": source_uri,
+            "source_uri": evidence_uri,
+            "raw_source_uri": source_uri,
             "clip_start_s": start_s,
             "clip_end_s": end_s,
             "candidate_tasks": model_tasks,
             "trigger_tasks": [],
             "event_codes": [],
             "selection_source": "adapter_uniform_control",
+            "task_context": canonical.get("labels") or {},
+            "capability_context": canonical.get("capabilities") or {},
+            "visual_evidence": "annotation_overlay" if visual_source else "raw_video",
             "assessment_dimensions": dimensions,
             "output_path": str(output / "teacher-labels" / request_id / "teacher-label.json"),
             "required_response": {
@@ -136,6 +148,7 @@ def plan_adapter_clips(
         "teacher_api_requests": len(api_rows),
         "window_s": window_s,
         "raw_immutable": True,
+        "visual_source": evidence_uri,
         "teacher_api_queue": str(output / "teacher-api-queue.jsonl"),
     }
     write_json(output / "summary.json", summary)

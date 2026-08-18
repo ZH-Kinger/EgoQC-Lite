@@ -287,6 +287,10 @@ def main() -> None:
     adapter_clip_plan.add_argument("--window-s", type=float, default=6.0)
     adapter_clip_plan.add_argument("--maximum-clips", type=int, default=3)
     adapter_clip_plan.add_argument("--confidence-threshold", type=float, default=0.5)
+    adapter_clip_plan.add_argument(
+        "--visual-source", type=Path,
+        help="可选：使用骨骼/mesh 叠加视频作为教师证据，同时保留 raw source 溯源",
+    )
     teacher_run = sub.add_parser(
         "run-teacher-api",
         help="断点执行视觉教师队列；密钥只从环境变量读取",
@@ -739,6 +743,7 @@ def main() -> None:
             window_s=args.window_s,
             maximum_clips=args.maximum_clips,
             confidence_threshold=args.confidence_threshold,
+            visual_source=args.visual_source,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":

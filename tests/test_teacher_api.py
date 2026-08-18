@@ -93,6 +93,9 @@ def _fake_urlopen(captured):
 class TeacherApiTests(unittest.TestCase):
     def test_bailian_preset_uses_video_frame_array_and_dashscope_key(self):
         request = _queue_row(Path("/video.mp4"), Path("/teacher-label.json"))
+        request["task_context"] = {"task": "add/remove lids"}
+        request["capability_context"] = {"mano_parameters": False}
+        request["visual_evidence"] = "annotation_overlay"
         frames = [
             {"relative_time_s": 0.0, "data_url": "data:image/jpeg;base64,AA=="},
             {"relative_time_s": 0.5, "data_url": "data:image/jpeg;base64,AQ=="},
@@ -105,9 +108,12 @@ class TeacherApiTests(unittest.TestCase):
             sample_fps=2,
         )
         media = payload["messages"][1]["content"][-1]
+        prompt = payload["messages"][1]["content"][0]["text"]
         self.assertEqual(media["type"], "video")
         self.assertEqual(media["video"], [frame["data_url"] for frame in frames])
         self.assertEqual(media["fps"], 2)
+        self.assertIn("add/remove lids", prompt)
+        self.assertIn("annotation_overlay", prompt)
 
     def test_low_cost_profile_reduces_visual_payload(self):
         with tempfile.TemporaryDirectory() as temporary:

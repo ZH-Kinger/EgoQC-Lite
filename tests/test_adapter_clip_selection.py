@@ -48,6 +48,8 @@ class AdapterClipSelectionTests(unittest.TestCase):
             self.assertAlmostEqual(rows[1]["clip_start_s"], 3.6)
             self.assertAlmostEqual(rows[1]["clip_end_s"], 9.6)
             self.assertEqual(set(rows[0]["candidate_tasks"]), {"hand_absent", "camera_shake"})
+            self.assertEqual(rows[0]["task_context"], {"task": "Task"})
+            self.assertEqual(rows[0]["visual_evidence"], "raw_video")
             self.assertTrue(rows[0]["output_path"].endswith("teacher-label.json"))
 
 
