@@ -99,7 +99,10 @@ def select_egodex_episodes(
     selected: List[Dict[str, Any]] = []
     for key in sorted(grouped):
         candidates = sorted(
-            grouped[key], key=lambda row: _stable_rank(row["episode_id"], seed)
+            grouped[key],
+            key=lambda row: _stable_rank(
+                Path(row["hdf5_path"]).relative_to(dataset).as_posix(), seed
+            ),
         )
         selected.extend(candidates[:episodes_per_task])
     return selected
@@ -533,6 +536,11 @@ def build_egodex_training_candidates(
                     for line in path.read_text(encoding="utf-8").splitlines()
                     if line.strip()
                 )
+    selected_ids = {str(row["episode_id"]) for row in selected}
+    # A changed seed/sample cap defines a new view. Never leak rows from an older
+    # selection into the current manifest merely because the same output is reused.
+    profiles = [row for row in profiles if str(row["episode_id"]) in selected_ids]
+    errors = [row for row in errors if str(row["episode_id"]) in selected_ids]
     completed_ids = {
         str(row["episode_id"])
         for row in [*profiles, *errors]

@@ -66,6 +66,7 @@ class EgoDexBatchTests(unittest.TestCase):
             first = select_egodex_episodes(
                 root, episodes_per_task=5, inventory_cache=cache
             )
+            uncached = select_egodex_episodes(root, episodes_per_task=5)
             (task / "1.hdf5").touch()
             cached = select_egodex_episodes(
                 root, episodes_per_task=5, inventory_cache=cache
@@ -74,6 +75,7 @@ class EgoDexBatchTests(unittest.TestCase):
                 root, episodes_per_task=5, inventory_cache=cache, refresh_inventory=True
             )
             self.assertEqual(len(first), 1)
+            self.assertEqual(first[0]["episode_id"], uncached[0]["episode_id"])
             self.assertEqual(cached, first)
             self.assertEqual(len(refreshed), 2)
 
@@ -125,6 +127,18 @@ class EgoDexBatchTests(unittest.TestCase):
                 )
             self.assertEqual(resumed["selection"]["reused"], 4)
             self.assertEqual(resumed["selection"]["processed_this_run"], 0)
+            with patch("egoqc.egodex_batch.EgoDexHDF5Adapter.load_episode", new=load):
+                narrowed = build_egodex_training_candidates(
+                    root,
+                    output,
+                    episodes_per_task=2,
+                    workers=2,
+                    resume=True,
+                    fast_profile=False,
+                )
+            self.assertEqual(narrowed["selection"]["selected"], 2)
+            self.assertEqual(narrowed["profiled"] + narrowed["errors"], 2)
+            self.assertEqual(sum(narrowed["tier_counts"].values()), 2)
 
     def test_output_inside_source_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
