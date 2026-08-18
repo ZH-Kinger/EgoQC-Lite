@@ -1,0 +1,39 @@
+{
+  "schema_version": "egoqc-task-taxonomy-v1",
+  "interaction_primitives": {
+    "pick_place": ["pick", "place", "put", "move", "transfer", "拿", "放", "移动"],
+    "open_close": ["open", "close", "lid", "door", "drawer", "打开", "关闭", "开盖"],
+    "insert_remove": ["insert", "remove", "plug", "unplug", "attach", "detach", "插入", "拔出", "拆下"],
+    "assemble_disassemble": ["assemble", "disassemble", "install", "construction", "组装", "拆卸", "安装"],
+    "fasten_unfasten": ["fasten", "unfasten", "buckle", "strap", "lock", "unlock", "扣", "解扣", "固定"],
+    "screw_unscrew": ["screw", "unscrew", "twist cap", "拧", "旋紧", "旋开"],
+    "pour_fill": ["pour", "fill", "empty", "add liquid", "nutrient solution", "倒", "灌", "加液"],
+    "fold_unfold": ["fold", "unfold", "叠", "折叠", "展开"],
+    "wipe_clean": ["wipe", "clean", "scrub", "wash", "擦", "清洁", "清洗"],
+    "stack_unstack": ["stack", "unstack", "堆叠", "拆堆"],
+    "cut_slice": ["cut", "slice", "chop", "剪", "切", "裁"],
+    "mix_stir": ["mix", "stir", "shake", "搅拌", "混合", "摇匀"],
+    "press_switch": ["press", "push button", "switch", "toggle", "按", "开关"],
+    "tie_untie": ["tie", "untie", "knot", "lace", "系", "解开", "打结"],
+    "write_draw": ["write", "draw", "paint", "写", "画", "涂"],
+    "adjust_align": ["adjust", "align", "arrange", "organize", "disorganized", "调整", "对齐", "整理"]
+  },
+  "object_affordances": {
+    "container": ["bottle", "cup", "box", "jar", "drawer", "container", "瓶", "杯", "盒", "罐"],
+    "deformable": ["cloth", "paper", "bag", "rope", "lace", "towel", "布", "纸", "袋", "绳"],
+    "articulated": ["door", "drawer", "hinge", "lamp", "chair", "门", "抽屉", "铰链"],
+    "tool": ["tool", "screwdriver", "scissors", "knife", "hammer", "drill", "工具", "螺丝刀", "剪刀", "刀"],
+    "liquid": ["water", "liquid", "solution", "drink", "oil", "水", "液体", "溶液", "油"],
+    "electronic": ["screen", "phone", "computer", "plug", "headphone", "屏幕", "手机", "电脑", "插头"],
+    "wearable": ["helmet", "shoe", "glove", "strap", "clothes", "头盔", "鞋", "手套", "衣服"],
+    "food": ["food", "fruit", "vegetable", "bread", "meal", "食物", "水果", "蔬菜", "面包"],
+    "furniture": ["chair", "desk", "table", "rack", "shelf", "椅", "桌", "架"]
+  },
+  "fine_manipulation_primitives": [
+    "insert_remove", "assemble_disassemble", "fasten_unfasten", "screw_unscrew",
+    "tie_untie", "write_draw"
+  ],
+  "likely_bimanual_primitives": [
+    "assemble_disassemble", "fasten_unfasten", "fold_unfold", "tie_untie"
+  ]
+}

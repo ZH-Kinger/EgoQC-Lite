@@ -46,6 +46,7 @@ from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
 from .egodex_review_batch import build_egodex_review_batch
 from .multisource_discovery import discover_lerobot_roots
+from .task_taxonomy import classify_task_records
 from .registry import (
     create_manifest,
     register_datasets,
@@ -331,6 +332,17 @@ def main() -> None:
     discover_sources.add_argument("--maximum-per-task", type=int, default=2)
     discover_sources.add_argument("--workers", type=int, default=16)
     discover_sources.add_argument("--seed", type=int, default=17)
+    task_taxonomy = sub.add_parser(
+        "classify-tasks",
+        help="对唯一任务文本做可复现多标签分类，并保留 unknown 供语义复核",
+    )
+    task_taxonomy.add_argument("--input", type=Path, required=True)
+    task_taxonomy.add_argument("--output", type=Path, required=True)
+    task_taxonomy.add_argument("--task-field", required=True)
+    task_taxonomy.add_argument("--source-id", required=True)
+    task_taxonomy.add_argument(
+        "--taxonomy", type=Path, default=Path("config/task_taxonomy.json")
+    )
     egodex_candidates.add_argument(
         "--full-profile", action="store_true",
         help="加载完整关节变换；默认仅读 confidence 和视频头以降低 OSS I/O",
@@ -847,6 +859,15 @@ def main() -> None:
             maximum_per_task=args.maximum_per_task,
             workers=args.workers,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "classify-tasks":
+        summary = classify_task_records(
+            args.input,
+            args.taxonomy,
+            args.output,
+            task_field=args.task_field,
+            source_id=args.source_id,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
