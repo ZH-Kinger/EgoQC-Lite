@@ -203,7 +203,7 @@ def _assign_tiers(
     )
     for row in profiles:
         if not row["hard_pass"]:
-            tier = "hard-negative"
+            tier = "programmatic-reject"
             reason = "hard_gate_failed"
         elif clean_threshold is not None and row["annotation_score"] >= clean_threshold:
             tier = "candidate-clean"
@@ -220,6 +220,9 @@ def _assign_tiers(
         row["candidate_tier"] = tier
         row["tier_reason"] = reason
         row["label_status"] = "weak_candidate_not_gold"
+        row["visual_model_eligible"] = tier in {
+            "candidate-clean", "review", "hard-negative"
+        }
     return {
         "candidate_clean_min_score": clean_threshold,
         "hard_negative_max_score": hard_negative_threshold,
@@ -250,6 +253,7 @@ def build_egodex_training_candidates(
     clean_quantile: float = 0.67,
     hard_negative_quantile: float = 0.20,
     partitions: Sequence[str] = DEFAULT_PARTITIONS,
+    resume: bool = False,
 ) -> Dict[str, Any]:
     """Build read-only EgoDex QC candidates and preserve every failure as evidence."""
     if workers <= 0:
@@ -267,6 +271,22 @@ def build_egodex_training_candidates(
     )
     profiles: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
+    if resume:
+        for path, target in (
+            (output / "profiles.jsonl", profiles),
+            (output / "errors.jsonl", errors),
+        ):
+            if path.exists():
+                target.extend(
+                    json.loads(line)
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                )
+    completed_ids = {
+        str(row["episode_id"])
+        for row in [*profiles, *errors]
+    }
+    pending = [row for row in selected if row["episode_id"] not in completed_ids]
     kwargs = {
         "confidence_threshold": confidence_threshold,
         "minimum_duration_s": minimum_duration_s,
@@ -278,7 +298,7 @@ def build_egodex_training_candidates(
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(_profile_one, dataset, row, **kwargs): row
-            for row in selected
+            for row in pending
         }
         for future in as_completed(futures):
             source = futures[future]
@@ -289,12 +309,20 @@ def build_egodex_training_candidates(
                     **source,
                     "error_type": type(error).__name__,
                     "error": str(error),
-                    "candidate_tier": "hard-negative",
+                    "candidate_tier": "technical-blocked",
                     "tier_reason": "adapter_or_integrity_failure",
                     "label_status": "weak_candidate_not_gold",
+                    "visual_model_eligible": False,
                 })
     profiles.sort(key=lambda row: row["episode_id"])
     errors.sort(key=lambda row: row["episode_id"])
+    for row in errors:
+        row.update({
+            "candidate_tier": "technical-blocked",
+            "tier_reason": "adapter_or_integrity_failure",
+            "label_status": "weak_candidate_not_gold",
+            "visual_model_eligible": False,
+        })
     thresholds = _assign_tiers(
         profiles,
         clean_quantile=clean_quantile,
@@ -302,9 +330,11 @@ def build_egodex_training_candidates(
     )
     tier_rows = {
         name: [row for row in profiles if row["candidate_tier"] == name]
-        for name in ("candidate-clean", "review", "hard-negative")
+        for name in (
+            "candidate-clean", "review", "hard-negative", "programmatic-reject"
+        )
     }
-    tier_rows["hard-negative"].extend(errors)
+    tier_rows["technical-blocked"] = list(errors)
     write_jsonl(output / "selected.jsonl", selected)
     write_jsonl(output / "profiles.jsonl", profiles)
     write_jsonl(output / "errors.jsonl", errors)
@@ -320,6 +350,8 @@ def build_egodex_training_candidates(
             "episodes_per_task": episodes_per_task,
             "partitions": list(partitions),
             "selected": len(selected),
+            "reused": len(selected) - len(pending),
+            "processed_this_run": len(pending),
             "tasks": len({(row["partition"], row["task"]) for row in selected}),
         },
         "profiled": len(profiles),
@@ -349,6 +381,8 @@ def build_egodex_training_candidates(
             "candidate_clean": str(output / "candidate-clean.jsonl"),
             "review": str(output / "review.jsonl"),
             "hard_negative": str(output / "hard-negative.jsonl"),
+            "programmatic_reject": str(output / "programmatic-reject.jsonl"),
+            "technical_blocked": str(output / "technical-blocked.jsonl"),
             "errors": str(output / "errors.jsonl"),
         },
     }

@@ -302,6 +302,9 @@ def main() -> None:
     egodex_candidates.add_argument("--maximum-absence-s", type=float, default=1.0)
     egodex_candidates.add_argument("--clean-quantile", type=float, default=0.67)
     egodex_candidates.add_argument("--hard-negative-quantile", type=float, default=0.20)
+    egodex_candidates.add_argument(
+        "--resume", action="store_true", help="复用 output 中已完成 episode，只处理新增抽样"
+    )
     adapter_clip_plan.add_argument("--window-s", type=float, default=6.0)
     adapter_clip_plan.add_argument("--maximum-clips", type=int, default=3)
     adapter_clip_plan.add_argument("--confidence-threshold", type=float, default=0.5)
@@ -779,6 +782,7 @@ def main() -> None:
             maximum_absence_s=args.maximum_absence_s,
             clean_quantile=args.clean_quantile,
             hard_negative_quantile=args.hard_negative_quantile,
+            resume=args.resume,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":

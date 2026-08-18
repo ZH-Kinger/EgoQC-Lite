@@ -81,11 +81,23 @@ class EgoDexBatchTests(unittest.TestCase):
             self.assertEqual(summary["profiled"], 3)
             self.assertEqual(summary["errors"], 1)
             self.assertEqual(sum(summary["tier_counts"].values()), 4)
+            self.assertEqual(summary["tier_counts"]["technical-blocked"], 1)
             self.assertTrue(summary["label_policy"]["validation_and_test_require_human_gold"])
             content = (output / "candidate-clean.jsonl").read_text(encoding="utf-8")
             self.assertIn('"label_status": "weak_candidate_not_gold"', content)
             self.assertIn("good", content)
             self.assertIn("broken pair", (output / "errors.jsonl").read_text(encoding="utf-8"))
+
+            with patch("egoqc.egodex_batch.EgoDexHDF5Adapter.load_episode", new=load):
+                resumed = build_egodex_training_candidates(
+                    root,
+                    output,
+                    episodes_per_task=4,
+                    workers=2,
+                    resume=True,
+                )
+            self.assertEqual(resumed["selection"]["reused"], 4)
+            self.assertEqual(resumed["selection"]["processed_this_run"], 0)
 
 
 if __name__ == "__main__":
