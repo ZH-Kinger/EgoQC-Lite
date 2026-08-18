@@ -23,6 +23,18 @@ from .report import write_json, write_jsonl
 
 SCHEMA_VERSION = "egoqc-teacher-api-run-v1"
 
+BAILIAN_SHARED_BASE_URLS = {
+    "beijing": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "singapore": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+    "virginia": "https://dashscope-us.aliyuncs.com/compatible-mode/v1",
+}
+
+BAILIAN_WORKSPACE_REGIONS = {
+    "beijing": "cn-beijing",
+    "singapore": "ap-southeast-1",
+    "virginia": "us-east-1",
+}
+
 
 def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
     rows = []
@@ -153,17 +165,35 @@ def build_chat_payload(
     frames: Iterable[Dict[str, Any]],
     *,
     response_format: bool = True,
+    media_mode: str = "ordered_images",
+    sample_fps: float = 2.0,
 ) -> Dict[str, Any]:
     content: List[Dict[str, Any]] = [{"type": "text", "text": _prompt(request)}]
-    for index, frame in enumerate(frames):
+    frame_rows = list(frames)
+    if media_mode == "bailian_video_frames":
         content.append({
             "type": "text",
-            "text": f"frame={index:02d}, relative_time={float(frame['relative_time_s']):.3f}s",
+            "text": "frame_relative_times_s=" + json.dumps(
+                [round(float(frame["relative_time_s"]), 4) for frame in frame_rows]
+            ),
         })
         content.append({
-            "type": "image_url",
-            "image_url": {"url": frame["data_url"], "detail": "low"},
+            "type": "video",
+            "video": [frame["data_url"] for frame in frame_rows],
+            "fps": sample_fps,
         })
+    elif media_mode == "ordered_images":
+        for index, frame in enumerate(frame_rows):
+            content.append({
+                "type": "text",
+                "text": f"frame={index:02d}, relative_time={float(frame['relative_time_s']):.3f}s",
+            })
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": frame["data_url"], "detail": "low"},
+            })
+    else:
+        raise ValueError(f"不支持 media_mode={media_mode}")
     payload: Dict[str, Any] = {
         "model": model,
         "temperature": 0,
@@ -309,6 +339,7 @@ def _execute_one(
     dry_run: bool,
     overwrite: bool,
     response_format: bool,
+    media_mode: str,
     sample_fps: float,
     max_frames: int,
     max_edge: int,
@@ -335,6 +366,8 @@ def _execute_one(
             model,
             frames,
             response_format=response_format,
+            media_mode=media_mode,
+            sample_fps=sample_fps,
         )
         if dry_run:
             return {
@@ -400,9 +433,12 @@ def run_teacher_api(
     queue: Path,
     output: Path,
     *,
+    provider: str = "openai-compatible",
+    region: Optional[str] = None,
+    workspace_id: Optional[str] = None,
     base_url: Optional[str],
     model: Optional[str],
-    api_key_env: str = "TEACHER_API_KEY",
+    api_key_env: Optional[str] = None,
     dry_run: bool = False,
     overwrite: bool = False,
     response_format: bool = True,
@@ -425,16 +461,38 @@ def run_teacher_api(
     request_ids = [str(request.get("request_id")) for request in requests]
     if len(set(request_ids)) != len(request_ids):
         raise ValueError("教师队列存在重复 request_id，拒绝重复计费")
+    if provider not in {"openai-compatible", "bailian"}:
+        raise ValueError(f"不支持 provider={provider}")
     effective_model = model or os.environ.get("TEACHER_API_MODEL")
     effective_base_url = base_url or os.environ.get("TEACHER_API_BASE_URL")
+    effective_key_env = api_key_env
+    media_mode = "ordered_images"
+    if provider == "bailian":
+        effective_model = effective_model or "qwen3-vl-plus"
+        effective_key_env = effective_key_env or "DASHSCOPE_API_KEY"
+        effective_region = region or os.environ.get("BAILIAN_REGION") or "beijing"
+        if effective_region not in BAILIAN_SHARED_BASE_URLS:
+            raise ValueError(f"不支持百炼地域: {effective_region}")
+        if not effective_base_url:
+            if workspace_id:
+                region_code = BAILIAN_WORKSPACE_REGIONS[effective_region]
+                effective_base_url = (
+                    f"https://{workspace_id}.{region_code}.maas.aliyuncs.com/compatible-mode/v1"
+                )
+            else:
+                effective_base_url = BAILIAN_SHARED_BASE_URLS[effective_region]
+        media_mode = "bailian_video_frames"
+        region = effective_region
+    else:
+        effective_key_env = effective_key_env or "TEACHER_API_KEY"
     if dry_run:
         effective_model = effective_model or "dry-run-model"
         effective_base_url = effective_base_url or "https://dry-run.invalid/v1"
     if not effective_model or not effective_base_url:
         raise ValueError("需要 --model/TEACHER_API_MODEL 和 --base-url/TEACHER_API_BASE_URL")
-    api_key = None if dry_run else os.environ.get(api_key_env)
+    api_key = None if dry_run else os.environ.get(effective_key_env)
     if not dry_run and not api_key:
-        raise ValueError(f"环境变量 {api_key_env} 未设置")
+        raise ValueError(f"环境变量 {effective_key_env} 未设置")
 
     output = output.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -447,6 +505,7 @@ def run_teacher_api(
         "dry_run": dry_run,
         "overwrite": overwrite,
         "response_format": response_format,
+        "media_mode": media_mode,
         "sample_fps": sample_fps,
         "max_frames": max_frames,
         "max_edge": max_edge,
@@ -483,10 +542,12 @@ def run_teacher_api(
         "requests": len(requests),
         "status_counts": status_counts,
         "model": effective_model,
+        "provider": provider,
+        "region": region,
         "endpoint_host": urlparse(endpoint).netloc,
         "dry_run": dry_run,
         "credentials_stored": False,
-        "media_mode": "ordered_jpeg_frames",
+        "media_mode": media_mode,
         "sample_fps": sample_fps,
         "max_frames": max_frames,
         "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},

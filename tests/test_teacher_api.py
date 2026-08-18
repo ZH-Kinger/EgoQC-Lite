@@ -8,7 +8,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from create_fixture import create_fixture
-from egoqc.teacher_api import extract_clip_frames, run_teacher_api, validate_teacher_label
+from egoqc.teacher_api import (
+    build_chat_payload,
+    extract_clip_frames,
+    run_teacher_api,
+    validate_teacher_label,
+)
 
 
 def _queue_row(video: Path, output_path: Path):
@@ -86,6 +91,24 @@ def _fake_urlopen(captured):
 
 
 class TeacherApiTests(unittest.TestCase):
+    def test_bailian_preset_uses_video_frame_array_and_dashscope_key(self):
+        request = _queue_row(Path("/video.mp4"), Path("/teacher-label.json"))
+        frames = [
+            {"relative_time_s": 0.0, "data_url": "data:image/jpeg;base64,AA=="},
+            {"relative_time_s": 0.5, "data_url": "data:image/jpeg;base64,AQ=="},
+        ]
+        payload = build_chat_payload(
+            request,
+            "qwen3-vl-plus",
+            frames,
+            media_mode="bailian_video_frames",
+            sample_fps=2,
+        )
+        media = payload["messages"][1]["content"][-1]
+        self.assertEqual(media["type"], "video")
+        self.assertEqual(media["video"], [frame["data_url"] for frame in frames])
+        self.assertEqual(media["fps"], 2)
+
     def test_rejects_unknown_task_and_out_of_range_finding(self):
         request = _queue_row(Path("/video.mp4"), Path("/teacher-label.json"))
         label = {

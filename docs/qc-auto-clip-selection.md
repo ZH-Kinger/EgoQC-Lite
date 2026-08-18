@@ -63,3 +63,33 @@ egoqc run-teacher-api \
 
 首次真实调用必须先限制 `--max-requests 10`，人工检查输出后再扩大。外部 API 的数据留存、
 训练使用政策和跨境合规未确认前，不得上传供应商私有视频。
+
+### 阿里云百炼预设
+
+百炼只需要一个 API Key。Key 放在开发机的 `DASHSCOPE_API_KEY`，不要提交到 Git、配置文件
+或聊天记录：
+
+```bash
+read -s DASHSCOPE_API_KEY
+export DASHSCOPE_API_KEY
+echo
+```
+
+北京地域可直接运行：
+
+```bash
+egoqc run-teacher-api \
+  --provider bailian --region beijing \
+  --queue /mnt/workspace/clip-plans/example/teacher-api-queue.jsonl \
+  --output /mnt/workspace/teacher-runs/example \
+  --max-requests 10 --concurrency 1
+```
+
+`--provider bailian` 默认使用 `qwen3-vl-plus`、`DASHSCOPE_API_KEY` 和对应地域的共享
+OpenAI-compatible 地址。地域可选 `beijing`、`singapore`、`virginia`；生产环境可额外传
+`--workspace-id` 使用业务空间专属域名，也可以用 `--model qwen3-vl-flash` 做低成本实验。
+
+百炼模式把抽取出的 Base64 JPEG 按一个 `type=video` 的有序帧数组提交，并携带相对时间和
+FPS，使模型按视频而非无关图片理解动作。实现遵循百炼
+[OpenAI-compatible Chat API](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions)
+和[千问 VL 接口](https://help.aliyun.com/zh/model-studio/qwen-vl-compatible-with-openai)。

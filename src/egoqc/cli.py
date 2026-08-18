@@ -277,9 +277,20 @@ def main() -> None:
     )
     teacher_run.add_argument("--queue", type=Path, required=True)
     teacher_run.add_argument("--output", type=Path, required=True)
+    teacher_run.add_argument(
+        "--provider",
+        choices=("openai-compatible", "bailian"),
+        default="openai-compatible",
+    )
+    teacher_run.add_argument(
+        "--region",
+        choices=("beijing", "singapore", "virginia"),
+        help="百炼 Key 所属地域，默认读取 BAILIAN_REGION 或使用 beijing",
+    )
+    teacher_run.add_argument("--workspace-id", help="可选；百炼业务空间 ID")
     teacher_run.add_argument("--base-url", help="默认读取 TEACHER_API_BASE_URL")
     teacher_run.add_argument("--model", help="默认读取 TEACHER_API_MODEL")
-    teacher_run.add_argument("--api-key-env", default="TEACHER_API_KEY")
+    teacher_run.add_argument("--api-key-env")
     teacher_run.add_argument("--dry-run", action="store_true")
     teacher_run.add_argument("--overwrite", action="store_true")
     teacher_run.add_argument("--no-response-format", action="store_true")
@@ -674,6 +685,9 @@ def main() -> None:
         summary = run_teacher_api(
             args.queue,
             args.output,
+            provider=args.provider,
+            region=args.region,
+            workspace_id=args.workspace_id,
             base_url=args.base_url,
             model=args.model,
             api_key_env=args.api_key_env,
