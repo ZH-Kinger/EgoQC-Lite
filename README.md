@@ -14,6 +14,10 @@ QC 小模型需要的 clip-level Gold Set、教师软标签、数据量、切分
 99% precision 置信度口径见 `docs/qc-training-data-contract.md`。生产训练前先运行
 `egoqc audit-qc-training`；未通过 readiness 不开启自动拒收。
 
+自动候选 clip 选择与开放世界教师审查见 `docs/qc-auto-clip-selection.md`；各层训练数据的
+起步量、用途和隔离要求见 `docs/qc-model-data-plan.md`。视觉教师只读取规则召回的 4–8 秒
+片段和少量未标注随机对照，不扫描全量视频。
+
 公开数据集缺少非关键字段时，先生成字段级补齐计划，再把确定性派生字段写入
 独立 Parquet overlay。该过程不复制或覆盖 raw，不会把模型估计、默认值或名义
 时间轴伪装成上游 Ground Truth：

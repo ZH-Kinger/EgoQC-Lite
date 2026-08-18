@@ -9,11 +9,11 @@
   },
   "training_readiness": {
     "minimum_train_labeled_per_task": 500,
-    "minimum_train_human_gold_per_task": 100,
-    "minimum_validation_gold_positives_per_task": 100,
-    "minimum_validation_gold_negatives_per_task": 300,
-    "minimum_test_gold_positives_per_task": 200,
-    "minimum_test_gold_negatives_per_task": 1000,
+    "minimum_train_human_gold_per_task": 500,
+    "minimum_validation_gold_positives_per_task": 200,
+    "minimum_validation_gold_negatives_per_task": 600,
+    "minimum_test_gold_positives_per_task": 400,
+    "minimum_test_gold_negatives_per_task": 2000,
     "minimum_safe_split_group_ratio": 0.95,
     "target_precision_note": "Empirical 0.99 is not a statistical guarantee; retain an untouched supplier-held-out test set and report confidence intervals."
   },
@@ -27,6 +27,17 @@
     "fps_below_requirement",
     "resolution_below_requirement"
   ],
+  "assessment_dimensions": {
+    "visual_quality": "清晰度、曝光、运动模糊、冻结帧、压缩损伤和严重镜头畸变",
+    "hand_observability": "手是否可见、遮挡、离画、截断，以及是否出现非操作者的手",
+    "camera_motion": "头部运动是否自然，是否存在无意义抖动、跳变或视角不可用",
+    "hand_reconstruction": "MANO 骨骼、mesh、左右手身份、尺度和视频内容是否对齐",
+    "temporal_consistency": "视频、姿态和文本在时间上是否连续、同步，边界是否合理",
+    "task_semantics": "任务或子任务文本是否与实际动作、对象和完成状态一致",
+    "interaction_quality": "动作是否真实、完整、可理解，关键接触与物体交互是否可见",
+    "training_utility": "该片段适合哪些训练目标，哪些标签缺失，是否只能用于视频预训练",
+    "open_world_findings": "发现预定义标签之外的异常并给出时间区间、证据和严重程度"
+  },
   "model_tasks": {
     "hand_absent": {"label": "手部长时间离画", "minimum_auto_reject_precision": 0.99},
     "persistent_extra_hands": {"label": "疑似第二个人的手", "minimum_auto_reject_precision": 0.99},
@@ -34,6 +45,12 @@
     "severe_occlusion": {"label": "影响操作理解的严重遮挡", "minimum_auto_reject_precision": 0.99},
     "mano_overlay_drift": {"label": "MANO骨骼或mesh视觉漂移", "minimum_auto_reject_precision": 0.995},
     "task_label_mismatch": {"label": "任务文本与视频不一致", "minimum_auto_reject_precision": 0.995},
-    "subtask_boundary_error": {"label": "子任务边界不合理", "minimum_auto_reject_precision": 0.995}
+    "subtask_boundary_error": {"label": "子任务边界不合理", "minimum_auto_reject_precision": 0.995},
+    "unusable_visual_quality": {"label": "画质不足以支持动作理解", "minimum_auto_reject_precision": 0.995},
+    "action_not_observable": {"label": "关键动作或接触过程不可观察", "minimum_auto_reject_precision": 0.995},
+    "interaction_incomplete": {"label": "交互过程缺失、截断或未完成", "minimum_auto_reject_precision": 0.995},
+    "frozen_or_duplicate_frames": {"label": "视频冻结或存在连续重复帧", "minimum_auto_reject_precision": 0.995},
+    "severe_lens_artifact": {"label": "严重畸变或矫正伪影影响使用", "minimum_auto_reject_precision": 0.995},
+    "scene_task_out_of_scope": {"label": "场景或操作不属于目标数据范围", "minimum_auto_reject_precision": 0.995}
   }
 }

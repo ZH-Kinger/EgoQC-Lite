@@ -145,6 +145,8 @@
 - [x] 冻结 clip-level Gold/teacher/weak label 优先级和权重契约。
 - [x] 实现按 person/operator/session 分组切分、评估集纯 Gold 约束和跨 split 泄漏审计。
 - [x] 实现每类 Gold 覆盖 readiness 和 precision 95% Wilson 下界门禁。
+- [x] 实现逐帧事件自动合并为 4–8 秒 clip、聚合 MP4 offset 和正常对照采样。
+- [x] 实现广义视觉教师任务队列：固定 taxonomy + 多维审查 + 开放世界 findings。
 - [ ] 根据 `docs/qc-training-data-contract.md` 收集真实 Gold clips，并离线扩展教师软标签。
 - [ ] 训练轻量视觉时序模型。
 - [ ] 输出：

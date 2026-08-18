@@ -38,6 +38,7 @@ from .distillation import (
     evaluate_qc_predictions,
     smoke_train_qc_student,
 )
+from .clip_selection import plan_qc_clips
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
 from .registry import (
@@ -246,6 +247,29 @@ def main() -> None:
     distill_eval.add_argument("--gold-labels", type=Path, required=True)
     distill_eval.add_argument("--task-config", type=Path, default=Path("config/visual_model_tasks.json"))
     distill_eval.add_argument("--output", type=Path, required=True)
+    clip_plan = sub.add_parser(
+        "plan-qc-clips",
+        help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
+    )
+    clip_plan.add_argument("dataset", type=Path)
+    clip_plan.add_argument("--quality-root", type=Path, required=True)
+    clip_plan.add_argument("--output", type=Path, required=True)
+    clip_plan.add_argument(
+        "--task-config",
+        type=Path,
+        default=Path("config/visual_model_tasks.json"),
+    )
+    clip_plan.add_argument("--video-key", default="observation.images.ego")
+    clip_plan.add_argument("--minimum-s", type=float, default=4.0)
+    clip_plan.add_argument("--maximum-s", type=float, default=8.0)
+    clip_plan.add_argument("--context-s", type=float, default=1.5)
+    clip_plan.add_argument("--merge-gap-s", type=float, default=1.0)
+    clip_plan.add_argument("--control-ratio", type=float, default=0.25)
+    clip_plan.add_argument("--minimum-control-clips", type=int, default=8)
+    clip_plan.add_argument("--maximum-clips", type=int)
+    clip_plan.add_argument("--seed", type=int, default=17)
+    clip_plan.add_argument("--source-dataset")
+    clip_plan.add_argument("--supplier-id")
     undistort_plan = sub.add_parser(
         "plan-vitra-undistortion",
         help="按 Microsoft VITRA 官方几何约定生成只读去畸变任务清单",
@@ -602,6 +626,25 @@ def main() -> None:
             args.gold_labels,
             args.task_config,
             args.output,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "plan-qc-clips":
+        summary = plan_qc_clips(
+            args.dataset,
+            args.quality_root,
+            args.output,
+            args.task_config,
+            video_key=args.video_key,
+            minimum_s=args.minimum_s,
+            maximum_s=args.maximum_s,
+            context_s=args.context_s,
+            merge_gap_s=args.merge_gap_s,
+            control_ratio=args.control_ratio,
+            minimum_control_clips=args.minimum_control_clips,
+            maximum_clips=args.maximum_clips,
+            seed=args.seed,
+            source_dataset=args.source_dataset,
+            supplier_id=args.supplier_id,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
