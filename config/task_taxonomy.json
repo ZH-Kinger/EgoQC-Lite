@@ -15,7 +15,7 @@
     "mix_stir": ["mix", "stir", "shake", "搅拌", "混合", "摇匀"],
     "press_switch": ["press", "push button", "switch", "toggle", "按", "开关"],
     "tie_untie": ["tie", "untie", "knot", "lace", "系", "解开", "打结"],
-    "write_draw": ["write", "draw", "paint", "写", "画", "涂"],
+    "write_draw": ["write", "draw", "paint", "color", "写", "画", "涂", "上色"],
     "adjust_align": ["adjust", "align", "arrange", "organize", "disorganized", "declutter", "stock", "unstock", "sort", "调整", "对齐", "整理", "分类"],
     "food_preparation": ["boil", "fry", "cook", "serve", "sandwich", "knead", "烹饪", "煮", "煎", "揉"],
     "personal_care": ["blowdry", "braid", "unbraid", "makeup", "dry hands", "吹发", "编发", "化妆", "擦干"],
