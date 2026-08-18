@@ -147,6 +147,7 @@
 - [x] 实现每类 Gold 覆盖 readiness 和 precision 95% Wilson 下界门禁。
 - [x] 实现逐帧事件自动合并为 4–8 秒 clip、聚合 MP4 offset 和正常对照采样。
 - [x] 实现广义视觉教师任务队列：固定 taxonomy + 多维审查 + 开放世界 findings。
+- [x] 实现 OpenAI-compatible 多帧教师执行器、dry-run、重试、缓存、schema 和成本统计。
 - [ ] 根据 `docs/qc-training-data-contract.md` 收集真实 Gold clips，并离线扩展教师软标签。
 - [ ] 训练轻量视觉时序模型。
 - [ ] 输出：

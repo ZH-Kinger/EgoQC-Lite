@@ -39,6 +39,7 @@ from .distillation import (
     smoke_train_qc_student,
 )
 from .clip_selection import plan_qc_clips
+from .teacher_api import run_teacher_api
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
 from .registry import (
@@ -270,6 +271,28 @@ def main() -> None:
     clip_plan.add_argument("--seed", type=int, default=17)
     clip_plan.add_argument("--source-dataset")
     clip_plan.add_argument("--supplier-id")
+    teacher_run = sub.add_parser(
+        "run-teacher-api",
+        help="断点执行视觉教师队列；密钥只从环境变量读取",
+    )
+    teacher_run.add_argument("--queue", type=Path, required=True)
+    teacher_run.add_argument("--output", type=Path, required=True)
+    teacher_run.add_argument("--base-url", help="默认读取 TEACHER_API_BASE_URL")
+    teacher_run.add_argument("--model", help="默认读取 TEACHER_API_MODEL")
+    teacher_run.add_argument("--api-key-env", default="TEACHER_API_KEY")
+    teacher_run.add_argument("--dry-run", action="store_true")
+    teacher_run.add_argument("--overwrite", action="store_true")
+    teacher_run.add_argument("--no-response-format", action="store_true")
+    teacher_run.add_argument("--concurrency", type=int, default=2)
+    teacher_run.add_argument("--sample-fps", type=float, default=2.0)
+    teacher_run.add_argument("--max-frames", type=int, default=16)
+    teacher_run.add_argument("--max-edge", type=int, default=768)
+    teacher_run.add_argument("--jpeg-quality", type=int, default=80)
+    teacher_run.add_argument("--timeout-s", type=float, default=120.0)
+    teacher_run.add_argument("--max-retries", type=int, default=3)
+    teacher_run.add_argument("--max-requests", type=int)
+    teacher_run.add_argument("--input-price-per-million", type=float)
+    teacher_run.add_argument("--output-price-per-million", type=float)
     undistort_plan = sub.add_parser(
         "plan-vitra-undistortion",
         help="按 Microsoft VITRA 官方几何约定生成只读去畸变任务清单",
@@ -645,6 +668,28 @@ def main() -> None:
             seed=args.seed,
             source_dataset=args.source_dataset,
             supplier_id=args.supplier_id,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "run-teacher-api":
+        summary = run_teacher_api(
+            args.queue,
+            args.output,
+            base_url=args.base_url,
+            model=args.model,
+            api_key_env=args.api_key_env,
+            dry_run=args.dry_run,
+            overwrite=args.overwrite,
+            response_format=not args.no_response_format,
+            concurrency=args.concurrency,
+            sample_fps=args.sample_fps,
+            max_frames=args.max_frames,
+            max_edge=args.max_edge,
+            jpeg_quality=args.jpeg_quality,
+            timeout_s=args.timeout_s,
+            max_retries=args.max_retries,
+            max_requests=args.max_requests,
+            input_price_per_million=args.input_price_per_million,
+            output_price_per_million=args.output_price_per_million,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":

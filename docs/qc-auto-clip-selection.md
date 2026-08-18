@@ -31,3 +31,35 @@ egoqc plan-qc-clips /mnt/datasets/example \
 
 接入具体 API 前需要确定：兼容协议、base URL、模型名、视频或多帧图片输入限制、并发/QPS、
 数据留存策略，以及 API key 的环境变量名。密钥只能由开发机环境或 secret manager 注入。
+
+## 教师 API 执行
+
+先进行少量 dry-run。该步骤真实解码 clip 并构造请求体，但不访问网络：
+
+```bash
+egoqc run-teacher-api \
+  --queue /mnt/workspace/clip-plans/example/teacher-api-queue.jsonl \
+  --output /mnt/workspace/teacher-runs/example-dry \
+  --dry-run --max-requests 10
+```
+
+OpenAI-compatible 多模态接口通过环境变量接入：
+
+```bash
+export TEACHER_API_BASE_URL='https://api.example.com/v1'
+export TEACHER_API_MODEL='vision-model-name'
+# TEACHER_API_KEY 由开发机 secret manager 注入，不写入脚本或配置文件
+
+egoqc run-teacher-api \
+  --queue /mnt/workspace/clip-plans/example/teacher-api-queue.jsonl \
+  --output /mnt/workspace/teacher-runs/example \
+  --concurrency 2 --sample-fps 2 --max-frames 16
+```
+
+默认把每个 4–8 秒 clip 解码为最多 16 张有序 JPEG，不产生中间 MP4。供应商不支持
+`response_format` 时添加 `--no-response-format`。已有合法 `teacher-label.json` 会直接命中缓存；
+`--overwrite` 才会强制重跑。`summary.json` 记录成功、缓存、失败、token usage 和可选成本估算，
+但不会记录密钥。
+
+首次真实调用必须先限制 `--max-requests 10`，人工检查输出后再扩大。外部 API 的数据留存、
+训练使用政策和跨境合规未确认前，不得上传供应商私有视频。
