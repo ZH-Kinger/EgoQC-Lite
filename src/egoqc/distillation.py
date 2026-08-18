@@ -537,6 +537,8 @@ def smoke_train_qc_student(
     device: str = "cuda",
     learning_rate: float = 5e-4,
     seed: int = 0,
+    image_size: int = 192,
+    temporal_stride: int = 4,
 ) -> Dict[str, Any]:
     try:
         import torch
@@ -545,8 +547,15 @@ def smoke_train_qc_student(
     except ImportError as error:
         raise RuntimeError("QC student 训练需要 torch") from error
     torch.manual_seed(seed)
+    if image_size < 64 or temporal_stride < 1:
+        raise ValueError("image_size 必须 >=64，temporal_stride 必须 >=1")
     dataset = VLAPretrainDataset(
-        manifest, split="train", allow_technical_candidates=True, seed=seed
+        manifest,
+        split="train",
+        allow_technical_candidates=True,
+        seed=seed,
+        output_size=(image_size, image_size),
+        resize_mode="letterbox",
     )
     if len(dataset) < 2:
         raise ValueError(f"训练样本不足: {len(dataset)}")
@@ -556,7 +565,7 @@ def smoke_train_qc_student(
     distillation = [sample["distillation"] for sample in samples]
     tasks = distillation[0]["tasks"]
     frames = torch.from_numpy(batch["frames"]).to(device=device, dtype=torch.float32)
-    frames = frames.permute(0, 1, 4, 2, 3)[:, ::4].contiguous().div_(255.0)
+    frames = frames.permute(0, 1, 4, 2, 3)[:, ::temporal_stride].contiguous().div_(255.0)
     targets = torch.tensor(
         [[item["targets"][task] for task in tasks] for item in distillation],
         dtype=torch.float32, device=device,
@@ -633,6 +642,9 @@ def smoke_train_qc_student(
         "elapsed_s": elapsed,
         "gpu_name": torch.cuda.get_device_name(device) if device.startswith("cuda") else None,
         "parameters": sum(parameter.numel() for parameter in model.parameters()),
+        "input_resolution": [image_size, image_size],
+        "resize_mode": "letterbox_preserve_full_ego_fov",
+        "temporal_stride": temporal_stride,
         "predictions": [
             {
                 "video_id": samples[index]["video_id"],

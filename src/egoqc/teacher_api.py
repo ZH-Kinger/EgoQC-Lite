@@ -35,6 +35,12 @@ BAILIAN_WORKSPACE_REGIONS = {
     "virginia": "us-east-1",
 }
 
+COST_PROFILES = {
+    "low": {"sample_fps": 1.5, "max_frames": 12, "max_edge": 448, "jpeg_quality": 72},
+    "balanced": {"sample_fps": 2.0, "max_frames": 16, "max_edge": 640, "jpeg_quality": 78},
+    "quality": {"sample_fps": 4.0, "max_frames": 32, "max_edge": 768, "jpeg_quality": 82},
+}
+
 
 def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
     rows = []
@@ -443,10 +449,11 @@ def run_teacher_api(
     overwrite: bool = False,
     response_format: bool = True,
     concurrency: int = 2,
-    sample_fps: float = 2.0,
-    max_frames: int = 16,
-    max_edge: int = 768,
-    jpeg_quality: int = 80,
+    cost_profile: str = "low",
+    sample_fps: Optional[float] = None,
+    max_frames: Optional[int] = None,
+    max_edge: Optional[int] = None,
+    jpeg_quality: Optional[int] = None,
     timeout_s: float = 120.0,
     max_retries: int = 3,
     max_requests: Optional[int] = None,
@@ -455,6 +462,15 @@ def run_teacher_api(
 ) -> Dict[str, Any]:
     if concurrency < 1 or max_retries < 0 or timeout_s <= 0:
         raise ValueError("concurrency/max_retries/timeout 参数非法")
+    if cost_profile not in COST_PROFILES:
+        raise ValueError(f"不支持 cost_profile={cost_profile}")
+    profile = COST_PROFILES[cost_profile]
+    sample_fps = float(sample_fps if sample_fps is not None else profile["sample_fps"])
+    max_frames = int(max_frames if max_frames is not None else profile["max_frames"])
+    max_edge = int(max_edge if max_edge is not None else profile["max_edge"])
+    jpeg_quality = int(
+        jpeg_quality if jpeg_quality is not None else profile["jpeg_quality"]
+    )
     requests = _read_jsonl(queue.expanduser().resolve())
     if max_requests is not None:
         requests = requests[: max(0, int(max_requests))]
@@ -546,10 +562,13 @@ def run_teacher_api(
         "region": region,
         "endpoint_host": urlparse(endpoint).netloc,
         "dry_run": dry_run,
+        "cost_profile": cost_profile,
         "credentials_stored": False,
         "media_mode": media_mode,
         "sample_fps": sample_fps,
         "max_frames": max_frames,
+        "max_edge": max_edge,
+        "jpeg_quality": jpeg_quality,
         "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
         "estimated_cost": estimated_cost,
         "results": str(output / "results.jsonl"),

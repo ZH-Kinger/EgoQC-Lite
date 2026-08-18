@@ -83,6 +83,19 @@ def _center_crop_resize(array: np.ndarray, size: Tuple[int, int]) -> np.ndarray:
     return np.asarray(image, dtype=np.uint8)
 
 
+def _letterbox_resize(array: np.ndarray, size: Tuple[int, int]) -> np.ndarray:
+    """Resize without cropping edge/bottom ego hands, then pad to the target."""
+
+    target_width, target_height = size
+    image = Image.fromarray(array)
+    image.thumbnail((target_width, target_height), Image.Resampling.BILINEAR)
+    canvas = Image.new("RGB", (target_width, target_height), (0, 0, 0))
+    left = (target_width - image.width) // 2
+    top = (target_height - image.height) // 2
+    canvas.paste(image, (left, top))
+    return np.asarray(canvas, dtype=np.uint8)
+
+
 class VLAPretrainDataset:
     """Framework-neutral reader for EgoQC VLA manifests.
 
@@ -98,6 +111,7 @@ class VLAPretrainDataset:
         allow_technical_candidates: bool = False,
         seed: int = 0,
         output_size: Tuple[int, int] = (224, 224),
+        resize_mode: str = "center_crop",
     ) -> None:
         self.manifest = manifest.expanduser().resolve()
         self.rows = _manifest_rows(self.manifest, split, allow_technical_candidates)
@@ -105,6 +119,9 @@ class VLAPretrainDataset:
         self.seed = seed
         self.epoch = 0
         self.output_size = output_size
+        if resize_mode not in {"center_crop", "letterbox"}:
+            raise ValueError(f"不支持 resize_mode={resize_mode}")
+        self.resize_mode = resize_mode
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -149,7 +166,11 @@ class VLAPretrainDataset:
                 if time_s + 1e-6 < target_times[target_index]:
                     continue
                 image = frame.to_ndarray(format="rgb24")
-                resized = _center_crop_resize(image, self.output_size)
+                resized = (
+                    _letterbox_resize(image, self.output_size)
+                    if self.resize_mode == "letterbox"
+                    else _center_crop_resize(image, self.output_size)
+                )
                 while target_index < frame_count and time_s + 1e-6 >= target_times[target_index]:
                     decoded.append(resized)
                     target_index += 1

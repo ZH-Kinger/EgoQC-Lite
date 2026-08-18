@@ -43,6 +43,13 @@ class VLADatasetTests(unittest.TestCase):
             self.assertEqual(sample["loss_masks"]["robot_action"], 0)
             batch = collate_vla_samples([sample, sample])
             self.assertEqual(batch["frames"].shape, (2, 2, 224, 224, 3))
+            low_cost_sample = VLAPretrainDataset(
+                manifest,
+                allow_technical_candidates=True,
+                output_size=(192, 192),
+                resize_mode="letterbox",
+            )[0]
+            self.assertEqual(low_cost_sample["frames"].shape, (2, 192, 192, 3))
             output = Path(temporary) / "smoke"
             summary = smoke_vla_loader(
                 manifest, output, batch_size=1, allow_technical_candidates=True

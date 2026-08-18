@@ -50,12 +50,20 @@ egoqc audit-qc-training \
 egoqc smoke-qc-student \
   --manifest /path/to/qc-distillation/qc-distillation.jsonl \
   --output /path/to/qc-student-smoke \
-  --steps 20 --batch-size 4 --device cuda
+  --steps 20 --batch-size 4 --device cuda \
+  --image-size 192 --temporal-stride 4
 ```
 
 当前 smoke student 是轻量 CNN + 双向 GRU + 多标签 head，只验证视频读取、soft target、
 标签 mask、加权 BCE、GPU backward 和 checkpoint。只有 Gold validation 达到每类规定的
 precision、完成概率校准和跨供应商测试后，才能为某个 task 单独开放自动拒收。
+
+QC student 不训练 8B 级通用大模型。默认输入从原始视频在线缩放为 192×192，并采用
+letterbox 保留完整第一视角画面，避免方形中心裁剪删除画面边缘或底部的手；每 4 个已解码帧
+取一帧进入时序层。原始 720p/1080p 始终只读保存，不额外存一份低分辨率视频。生产模型优先
+采用约 5M–30M 参数的轻量视觉编码器和小型时序 head；先冻结编码器训练 head，效果不足再
+逐层解冻。MANO 数值指标、速度、相机运动和规则事件作为低维特征融合，不让视觉网络重复
+学习代码已经能精确计算的内容。
 
 ## Gold Set 门禁
 

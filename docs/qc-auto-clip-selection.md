@@ -89,6 +89,11 @@ egoqc run-teacher-api \
 OpenAI-compatible 地址。地域可选 `beijing`、`singapore`、`virginia`；生产环境可额外传
 `--workspace-id` 使用业务空间专属域名，也可以用 `--model qwen3-vl-flash` 做低成本实验。
 
+默认 `--cost-profile low`：1.5 FPS、最多 12 帧、长边 448、JPEG 质量 72。相较旧的
+768 长边 × 16 帧，视觉像素输入约为 25%；需要人工仲裁的少量难例再使用
+`--cost-profile balanced` 或 `quality`。高频抖动、速度跳变和时间戳仍读取原始 30 FPS
+标注由确定性规则计算，不依赖教师抽帧率。
+
 百炼模式把抽取出的 Base64 JPEG 按一个 `type=video` 的有序帧数组提交，并携带相对时间和
 FPS，使模型按视频而非无关图片理解动作。实现遵循百炼
 [OpenAI-compatible Chat API](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions)

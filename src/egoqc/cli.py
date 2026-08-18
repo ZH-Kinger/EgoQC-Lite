@@ -240,6 +240,8 @@ def main() -> None:
     distill_smoke.add_argument("--learning-rate", type=float, default=5e-4)
     distill_smoke.add_argument("--device", default="cuda")
     distill_smoke.add_argument("--seed", type=int, default=0)
+    distill_smoke.add_argument("--image-size", type=int, default=192)
+    distill_smoke.add_argument("--temporal-stride", type=int, default=4)
     distill_eval = sub.add_parser(
         "evaluate-qc-student",
         help="用人工 Gold Set 搜索每类高精度阈值并决定是否允许自动拒收",
@@ -295,10 +297,15 @@ def main() -> None:
     teacher_run.add_argument("--overwrite", action="store_true")
     teacher_run.add_argument("--no-response-format", action="store_true")
     teacher_run.add_argument("--concurrency", type=int, default=2)
-    teacher_run.add_argument("--sample-fps", type=float, default=2.0)
-    teacher_run.add_argument("--max-frames", type=int, default=16)
-    teacher_run.add_argument("--max-edge", type=int, default=768)
-    teacher_run.add_argument("--jpeg-quality", type=int, default=80)
+    teacher_run.add_argument(
+        "--cost-profile",
+        choices=("low", "balanced", "quality"),
+        default="low",
+    )
+    teacher_run.add_argument("--sample-fps", type=float)
+    teacher_run.add_argument("--max-frames", type=int)
+    teacher_run.add_argument("--max-edge", type=int)
+    teacher_run.add_argument("--jpeg-quality", type=int)
     teacher_run.add_argument("--timeout-s", type=float, default=120.0)
     teacher_run.add_argument("--max-retries", type=int, default=3)
     teacher_run.add_argument("--max-requests", type=int)
@@ -645,6 +652,8 @@ def main() -> None:
             learning_rate=args.learning_rate,
             device=args.device,
             seed=args.seed,
+            image_size=args.image_size,
+            temporal_stride=args.temporal_stride,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "audit-qc-training":
@@ -695,6 +704,7 @@ def main() -> None:
             overwrite=args.overwrite,
             response_format=not args.no_response_format,
             concurrency=args.concurrency,
+            cost_profile=args.cost_profile,
             sample_fps=args.sample_fps,
             max_frames=args.max_frames,
             max_edge=args.max_edge,

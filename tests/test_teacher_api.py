@@ -109,6 +109,29 @@ class TeacherApiTests(unittest.TestCase):
         self.assertEqual(media["video"], [frame["data_url"] for frame in frames])
         self.assertEqual(media["fps"], 2)
 
+    def test_low_cost_profile_reduces_visual_payload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = create_fixture(root / "dataset", frames=150)
+            video = dataset / "videos/observation.images.ego/chunk-000/file-000.mp4"
+            queue = root / "queue.jsonl"
+            queue.write_text(
+                json.dumps(_queue_row(video, root / "labels/teacher-label.json")) + "\n"
+            )
+            summary = run_teacher_api(
+                queue,
+                root / "dry-run",
+                provider="bailian",
+                region="beijing",
+                base_url=None,
+                model=None,
+                dry_run=True,
+            )
+            self.assertEqual(summary["cost_profile"], "low")
+            self.assertEqual(summary["max_frames"], 12)
+            self.assertEqual(summary["max_edge"], 448)
+            self.assertEqual(summary["jpeg_quality"], 72)
+
     def test_rejects_unknown_task_and_out_of_range_finding(self):
         request = _queue_row(Path("/video.mp4"), Path("/teacher-label.json"))
         label = {
