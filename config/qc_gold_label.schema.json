@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/egoqc/qc-gold-label-v1.schema.json",
+  "title": "EgoQC clip-level human Gold label",
+  "type": "object",
+  "required": [
+    "video_id",
+    "source_revision",
+    "supplier_id",
+    "scene_id",
+    "camera_id",
+    "task_id",
+    "clip_start_s",
+    "clip_end_s",
+    "reviewer_id",
+    "reviewed_at",
+    "label_version",
+    "labels"
+  ],
+  "anyOf": [
+    {"required": ["person_id"]},
+    {"required": ["operator_id"]},
+    {"required": ["collection_session_id"]}
+  ],
+  "properties": {
+    "video_id": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "source_dataset": {"type": "string"},
+    "supplier_id": {"type": "string", "minLength": 1},
+    "person_id": {"type": "string", "minLength": 1},
+    "operator_id": {"type": "string", "minLength": 1},
+    "collection_session_id": {"type": "string", "minLength": 1},
+    "scene_id": {"type": "string", "minLength": 1},
+    "camera_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "clip_start_s": {"type": "number", "minimum": 0},
+    "clip_end_s": {"type": "number", "exclusiveMinimum": 0},
+    "reviewer_id": {"type": "string", "minLength": 1},
+    "second_reviewer_id": {"type": ["string", "null"]},
+    "adjudicator_id": {"type": ["string", "null"]},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "label_version": {"const": "egoqc-visual-gold-v1"},
+    "labels": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "hand_absent": {"type": "boolean"},
+        "persistent_extra_hands": {"type": "boolean"},
+        "semantic_camera_shake": {"type": "boolean"},
+        "severe_occlusion": {"type": "boolean"},
+        "mano_overlay_drift": {"type": "boolean"},
+        "task_label_mismatch": {"type": "boolean"},
+        "subtask_boundary_error": {"type": "boolean"}
+      }
+    },
+    "note": {"type": "string"}
+  }
+}

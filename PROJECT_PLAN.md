@@ -142,7 +142,10 @@
   - joint permutation；
   - [x] 基于局部插值残差/MAD 的 pose freeze、jitter、短缺失段首版检测；
   - betas 漂移。
-- [ ] 由 500–1000 个真实 Gold clips 生成 5000–20000 个精确标签样本。
+- [x] 冻结 clip-level Gold/teacher/weak label 优先级和权重契约。
+- [x] 实现按 person/operator/session 分组切分、评估集纯 Gold 约束和跨 split 泄漏审计。
+- [x] 实现每类 Gold 覆盖 readiness 和 precision 95% Wilson 下界门禁。
+- [ ] 根据 `docs/qc-training-data-contract.md` 收集真实 Gold clips，并离线扩展教师软标签。
 - [ ] 训练轻量视觉时序模型。
 - [ ] 输出：
   - aligned probability；

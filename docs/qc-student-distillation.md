@@ -28,6 +28,8 @@
 
 教师输出必须缓存并携带模型和 prompt 版本。自由文本理由只能作为证据，不能直接作为
 训练 target 或采购验收结论。
+完整的 clip-level Gold 字段、数量和切分要求见
+`docs/qc-training-data-contract.md`。
 
 ## 构建与工程 smoke
 
@@ -39,6 +41,11 @@ egoqc build-qc-distillation \
   --teacher-root /path/to/teacher-labels \
   --gold-labels /path/to/human-gold.jsonl \
   --output /path/to/qc-distillation
+
+egoqc audit-qc-training \
+  --manifest /path/to/qc-distillation/qc-distillation.jsonl \
+  --task-config config/visual_model_tasks.json \
+  --output /path/to/qc-training-audit
 
 egoqc smoke-qc-student \
   --manifest /path/to/qc-distillation/qc-distillation.jsonl \
@@ -63,6 +70,7 @@ egoqc evaluate-qc-student \
   --output /path/to/evaluation
 ```
 
-每个任务独立要求至少 50 个 Gold 正例、50 个 Gold 负例，并在 Gold 上找到满足 taxonomy
-规定 precision 的阈值，否则该任务 `auto_reject_enabled=false`。报告同时输出 Brier score
-和 10-bin ECE。生产上线还应额外分供应商、场景和相机型号做切片验证。
+每个任务先检查 Gold 正负例覆盖，再搜索满足 taxonomy precision 的阈值。
+经验 precision 达标仍不足够；其 95% Wilson 下界也必须达标，否则该任务
+`auto_reject_enabled=false`。报告同时输出 Brier score 和 10-bin ECE。生产上线还应
+分供应商、场景、人物和相机型号做切片验证。

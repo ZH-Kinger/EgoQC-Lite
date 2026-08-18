@@ -33,6 +33,7 @@ from .training_views import build_rekadaily_training_views
 from .vla_dataset import smoke_vla_loader
 from .vla_train import smoke_vla_train
 from .distillation import (
+    audit_qc_training_data,
     build_distillation_manifest,
     evaluate_qc_predictions,
     smoke_train_qc_student,
@@ -219,6 +220,13 @@ def main() -> None:
     distill_build.add_argument("--hand-screen-root", type=Path)
     distill_build.add_argument("--teacher-root", type=Path)
     distill_build.add_argument("--gold-labels", type=Path)
+    distill_audit = sub.add_parser(
+        "audit-qc-training",
+        help="检查 Gold Set 覆盖、分组切分、跨 split 泄漏和训练治理状态",
+    )
+    distill_audit.add_argument("--manifest", type=Path, required=True)
+    distill_audit.add_argument("--task-config", type=Path, default=Path("config/visual_model_tasks.json"))
+    distill_audit.add_argument("--output", type=Path, required=True)
     distill_smoke = sub.add_parser(
         "smoke-qc-student",
         help="用蒸馏 manifest 训练轻量时序 QC student 工程样机",
@@ -579,6 +587,13 @@ def main() -> None:
             learning_rate=args.learning_rate,
             device=args.device,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "audit-qc-training":
+        summary = audit_qc_training_data(
+            args.manifest,
+            args.task_config,
+            args.output,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "evaluate-qc-student":

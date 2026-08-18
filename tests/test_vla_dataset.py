@@ -50,6 +50,18 @@ class VLADatasetTests(unittest.TestCase):
             self.assertEqual(summary["frames_shape"], [1, 2, 224, 224, 3])
             self.assertTrue((output / "vla-loader-contact-sheet.jpg").is_file())
 
+            row["vla_pretraining"]["clip_sampler"] = {
+                "mode": "fixed_reviewed_window",
+                "fixed_start_s": 0.1,
+                "window_s": 0.2,
+                "decode_fps": 8.0,
+            }
+            manifest.write_text(json.dumps(row) + "\n")
+            fixed_sample = VLAPretrainDataset(
+                manifest, allow_technical_candidates=True
+            )[0]
+            self.assertAlmostEqual(fixed_sample["clip_start_s"], 0.1)
+
             shard = Path(temporary) / "shard.tar"
             with tarfile.open(shard, "w") as archive:
                 archive.add(video, arcname="nested/sample-1.mp4")

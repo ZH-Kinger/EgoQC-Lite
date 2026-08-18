@@ -4,9 +4,9 @@ import hashlib
 import json
 import math
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -37,13 +37,55 @@ def _read_jsonl(path: Optional[Path]) -> Iterable[Dict[str, Any]]:
     return rows
 
 
-def _split(video_id: str) -> str:
-    bucket = int(hashlib.sha256(("qc-distill:" + video_id).encode()).hexdigest()[:8], 16) % 1000
-    if bucket < 900:
+def _split(group_id: str) -> str:
+    bucket = int(hashlib.sha256(("qc-distill:" + group_id).encode()).hexdigest()[:8], 16) % 1000
+    if bucket < 800:
         return "train"
-    if bucket < 950:
+    if bucket < 900:
         return "validation"
     return "test"
+
+
+def _split_group(
+    source_row: Dict[str, Any], gold_row: Dict[str, Any]
+) -> Tuple[str, str, str]:
+    """Choose the strongest available identity boundary for leakage-safe splitting."""
+
+    source_dataset = str(source_row.get("source_dataset") or "unknown-source")
+    supplier = str(
+        gold_row.get("supplier_id")
+        or source_row.get("supplier_id")
+        or source_row.get("vendor_id")
+        or "unknown-supplier"
+    )
+    candidates = (
+        ("person_id", gold_row.get("person_id") or source_row.get("person_id")),
+        ("operator_id", gold_row.get("operator_id") or source_row.get("operator_id")),
+        (
+            "collection_session_id",
+            gold_row.get("collection_session_id")
+            or source_row.get("collection_session_id")
+            or source_row.get("session_id"),
+        ),
+    )
+    for source, value in candidates:
+        if value not in (None, ""):
+            return f"{source_dataset}:{supplier}:{source}:{value}", source, "low"
+    upstream = source_row.get("vla_pretraining", {}).get("split_group")
+    if upstream and str(upstream) != str(source_row.get("video_id")):
+        return f"{source_dataset}:{supplier}:upstream:{upstream}", "upstream_split_group", "medium"
+    video_id = str(source_row["video_id"])
+    return f"{source_dataset}:{supplier}:video:{video_id}", "video_id_fallback", "high"
+
+
+def _unique_by_video(rows: Sequence[Dict[str, Any]], source: str) -> Dict[str, Dict[str, Any]]:
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        video_id = str(row["video_id"])
+        if video_id in result:
+            raise ValueError(f"{source} 中 video_id 重复: {video_id}")
+        result[video_id] = row
+    return result
 
 
 def _hand_report(root: Optional[Path], video_id: str) -> Optional[Dict[str, Any]]:
@@ -121,7 +163,7 @@ def build_distillation_manifest(
     config = json.loads(task_config.read_text(encoding="utf-8"))
     tasks = list(config["model_tasks"])
     task_set = set(tasks)
-    gold_by_video = {str(row["video_id"]): row for row in _read_jsonl(gold_labels)}
+    gold_by_video = _unique_by_video(list(_read_jsonl(gold_labels)), "Gold Set")
     output = output.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
     manifest = []
@@ -137,27 +179,83 @@ def build_distillation_manifest(
             labels.update(_programmatic_labels(hand))
         labels.update(_load_teacher(teacher_root, video_id, task_set))
         gold = gold_by_video.get(video_id, {})
+        human_labels: Dict[str, Dict[str, Any]] = {}
         for task, raw_value in gold.get("labels", {}).items():
             if task not in task_set:
                 raise ValueError(f"Gold Set 出现未知 task={task}, video_id={video_id}")
-            labels[task] = {
+            human_labels[task] = {
                 "probability": float(bool(raw_value)),
                 "confidence": 1.0,
                 "source": "human_gold",
                 "reviewer_id": gold.get("reviewer_id"),
             }
+        labels.update(human_labels)
+        split_group, split_group_source, leakage_risk = _split_group(source_row, gold)
+        split = _split(split_group)
+        # Validation and test are measurement sets, never teacher self-evaluation.
+        if split != "train":
+            labels = human_labels
         if not labels:
             continue
         for label in labels.values():
             source_counts[label["source"]] += 1
         derived = dict(source_row)
+        for field in (
+            "source_revision",
+            "source_dataset",
+            "supplier_id",
+            "person_id",
+            "operator_id",
+            "collection_session_id",
+            "scene_id",
+            "camera_id",
+            "task_id",
+        ):
+            if gold.get(field) not in (None, ""):
+                derived[field] = gold[field]
         derived["vla_pretraining"] = dict(source_row["vla_pretraining"])
         derived["vla_pretraining"]["candidate"] = True
-        derived["vla_pretraining"]["split"] = _split(video_id)
+        derived["vla_pretraining"]["split"] = split
+        derived["vla_pretraining"]["split_group"] = split_group
+        clip_start = gold.get("clip_start_s")
+        clip_end = gold.get("clip_end_s")
+        if clip_start is not None or clip_end is not None:
+            if clip_start is None or clip_end is None:
+                raise ValueError(f"Gold clip 必须同时提供 start/end: video_id={video_id}")
+            clip_start = float(clip_start)
+            clip_end = float(clip_end)
+            duration = float(source_row.get("duration_s") or 0.0)
+            if clip_start < 0 or clip_end <= clip_start or (duration > 0 and clip_end > duration + 1e-3):
+                raise ValueError(
+                    f"Gold clip 越界: video_id={video_id}, clip=[{clip_start},{clip_end}], duration={duration}"
+                )
+            derived["vla_pretraining"]["clip_sampler"] = {
+                **source_row["vla_pretraining"]["clip_sampler"],
+                "mode": "fixed_reviewed_window",
+                "fixed_start_s": clip_start,
+                "window_s": clip_end - clip_start,
+            }
         derived["distillation"] = {
             "schema_version": SCHEMA_VERSION,
             "tasks": tasks,
-            "split": _split(video_id),
+            "split": split,
+            "split_group": split_group,
+            "split_group_source": split_group_source,
+            "leakage_risk": leakage_risk,
+            "label_scope": "reviewed_clip" if clip_start is not None else "video_level",
+            "clip_start_s": clip_start,
+            "clip_end_s": clip_end,
+            "gold_provenance": {
+                key: gold.get(key)
+                for key in (
+                    "reviewer_id",
+                    "second_reviewer_id",
+                    "adjudicator_id",
+                    "reviewed_at",
+                    "label_version",
+                )
+                if gold.get(key) is not None
+            },
             "targets": {task: float(labels.get(task, {}).get("probability", 0.0)) for task in tasks},
             "label_masks": {task: int(task in labels) for task in tasks},
             "label_weights": {
@@ -173,6 +271,7 @@ def build_distillation_manifest(
             "label_sources": {task: labels[task]["source"] for task in labels},
             "label_details": labels,
             "acceptance_authority": False,
+            "evaluation_labels_are_human_only": split != "train",
         }
         manifest.append(derived)
 
@@ -188,6 +287,12 @@ def build_distillation_manifest(
         "split_counts": dict(split_counts),
         "task_label_counts": dict(task_counts),
         "label_source_counts": dict(source_counts),
+        "split_group_source_counts": dict(
+            Counter(row["distillation"]["split_group_source"] for row in manifest)
+        ),
+        "high_leakage_risk_records": sum(
+            row["distillation"]["leakage_risk"] == "high" for row in manifest
+        ),
         "gold_videos": len(gold_by_video),
         "calibration_status": "unavailable" if not gold_by_video else "requires_evaluation",
         "auto_reject_enabled": False,
@@ -196,6 +301,231 @@ def build_distillation_manifest(
     }
     write_json(output / "summary.json", summary)
     return summary
+
+
+def audit_qc_training_data(
+    manifest: Path,
+    task_config: Path,
+    output: Path,
+) -> Dict[str, Any]:
+    """Audit a distillation manifest before any production student training."""
+
+    rows = list(_read_jsonl(manifest))
+    config = json.loads(task_config.read_text(encoding="utf-8"))
+    tasks = list(config["model_tasks"])
+    readiness = config.get("training_readiness", {})
+    minimum_train = int(readiness.get("minimum_train_labeled_per_task", 500))
+    minimum_train_gold = int(readiness.get("minimum_train_human_gold_per_task", 100))
+    minimum_validation_positive = int(
+        readiness.get("minimum_validation_gold_positives_per_task", 100)
+    )
+    minimum_validation_negative = int(
+        readiness.get("minimum_validation_gold_negatives_per_task", 300)
+    )
+    minimum_test_positive = int(
+        readiness.get("minimum_test_gold_positives_per_task", 200)
+    )
+    minimum_test_negative = int(
+        readiness.get("minimum_test_gold_negatives_per_task", 1000)
+    )
+    minimum_safe_group_ratio = float(
+        readiness.get("minimum_safe_split_group_ratio", 0.95)
+    )
+
+    blockers: List[Dict[str, Any]] = []
+    coverage: Dict[str, Dict[str, Counter]] = {
+        split: {task: Counter() for task in tasks}
+        for split in ("train", "validation", "test")
+    }
+    split_groups: Dict[str, set[str]] = defaultdict(set)
+    video_splits: Dict[str, set[str]] = defaultdict(set)
+    uri_splits: Dict[str, set[str]] = defaultdict(set)
+    supplier_splits: Dict[str, set[str]] = defaultdict(set)
+    high_risk = 0
+    invalid_rows = 0
+    governance_blocked = 0
+    metadata_missing_counts: Counter = Counter()
+
+    for row_number, row in enumerate(rows, 1):
+        distillation = row.get("distillation", {})
+        video_id = str(row.get("video_id") or "")
+        split = str(distillation.get("split") or "")
+        group = str(distillation.get("split_group") or "")
+        source_uri = str(row.get("source_uri") or "")
+        if distillation.get("schema_version") != SCHEMA_VERSION or split not in coverage:
+            invalid_rows += 1
+            blockers.append({
+                "code": "invalid_manifest_row",
+                "row_number": row_number,
+                "video_id": video_id,
+            })
+            continue
+        if not video_id or not source_uri or not group:
+            invalid_rows += 1
+            blockers.append({
+                "code": "missing_training_identity_or_source",
+                "row_number": row_number,
+                "video_id": video_id,
+            })
+            continue
+        split_groups[group].add(split)
+        video_splits[video_id].add(split)
+        uri_splits[source_uri].add(split)
+        supplier = row.get("supplier_id") or row.get("vendor_id")
+        if supplier:
+            supplier_splits[str(supplier)].add(split)
+        for field in ("supplier_id", "scene_id", "camera_id", "task_id"):
+            if not row.get(field):
+                metadata_missing_counts[field] += 1
+        if distillation.get("leakage_risk") == "high":
+            high_risk += 1
+        if split == "train" and not row.get("vla_pretraining", {}).get("training_ready", False):
+            governance_blocked += 1
+
+        targets = distillation.get("targets", {})
+        masks = distillation.get("label_masks", {})
+        sources = distillation.get("label_sources", {})
+        for task in tasks:
+            if not masks.get(task):
+                continue
+            source = str(sources.get(task) or "unknown")
+            target = float(targets[task])
+            stats = coverage[split][task]
+            stats["labeled"] += 1
+            stats["positive" if target >= 0.5 else "negative"] += 1
+            stats[f"source:{source}"] += 1
+            if source == "human_gold":
+                stats["human_gold"] += 1
+            elif split != "train":
+                blockers.append({
+                    "code": "weak_label_in_evaluation_split",
+                    "video_id": video_id,
+                    "split": split,
+                    "task": task,
+                    "source": source,
+                })
+        if split != "train" and not distillation.get("label_details"):
+            blockers.append({
+                "code": "evaluation_provenance_missing",
+                "video_id": video_id,
+                "split": split,
+            })
+        if split != "train":
+            provenance = distillation.get("gold_provenance", {})
+            missing_provenance = [
+                key
+                for key in ("reviewer_id", "reviewed_at", "label_version")
+                if not provenance.get(key)
+            ]
+            if missing_provenance:
+                blockers.append({
+                    "code": "evaluation_gold_provenance_incomplete",
+                    "video_id": video_id,
+                    "split": split,
+                    "missing": missing_provenance,
+                })
+        if split != "train" and (
+            distillation.get("clip_start_s") is None
+            or distillation.get("clip_end_s") is None
+        ):
+            blockers.append({
+                "code": "evaluation_clip_window_missing",
+                "video_id": video_id,
+                "split": split,
+            })
+
+    for code, values in (
+        ("split_group_leakage", split_groups),
+        ("video_id_leakage", video_splits),
+        ("source_uri_leakage", uri_splits),
+    ):
+        for identity, splits in values.items():
+            if len(splits) > 1:
+                blockers.append({
+                    "code": code,
+                    "identity": identity,
+                    "splits": sorted(splits),
+                })
+
+    task_reports: Dict[str, Dict[str, Any]] = {}
+    for task in tasks:
+        train = coverage["train"][task]
+        validation = coverage["validation"][task]
+        test = coverage["test"][task]
+        requirements = {
+            "train_labeled": (train["labeled"], minimum_train),
+            "train_human_gold": (train["human_gold"], minimum_train_gold),
+            "validation_gold_positive": (validation["positive"], minimum_validation_positive),
+            "validation_gold_negative": (validation["negative"], minimum_validation_negative),
+            "test_gold_positive": (test["positive"], minimum_test_positive),
+            "test_gold_negative": (test["negative"], minimum_test_negative),
+        }
+        task_blockers = [
+            name for name, (actual, required) in requirements.items() if actual < required
+        ]
+        task_reports[task] = {
+            "ready": not task_blockers,
+            "block_reasons": task_blockers,
+            "requirements": {
+                name: {"actual": actual, "required": required}
+                for name, (actual, required) in requirements.items()
+            },
+            "coverage": {
+                split: dict(coverage[split][task])
+                for split in ("train", "validation", "test")
+            },
+        }
+
+    safe_group_ratio = 1.0 - high_risk / len(rows) if rows else 0.0
+    global_block_reasons = []
+    if not rows:
+        global_block_reasons.append("empty_manifest")
+    if invalid_rows:
+        global_block_reasons.append("invalid_manifest_rows")
+    if any(item["code"].endswith("leakage") for item in blockers):
+        global_block_reasons.append("cross_split_leakage")
+    if any(item["code"] == "weak_label_in_evaluation_split" for item in blockers):
+        global_block_reasons.append("weak_evaluation_labels")
+    if safe_group_ratio < minimum_safe_group_ratio:
+        global_block_reasons.append("insufficient_person_or_session_metadata")
+    if governance_blocked:
+        global_block_reasons.append("training_license_or_governance_missing")
+    if metadata_missing_counts:
+        global_block_reasons.append("evaluation_slice_metadata_incomplete")
+    evaluation_contract_codes = {
+        "evaluation_provenance_missing",
+        "evaluation_gold_provenance_incomplete",
+        "evaluation_clip_window_missing",
+    }
+    if any(item["code"] in evaluation_contract_codes for item in blockers):
+        global_block_reasons.append("evaluation_contract_incomplete")
+    if not all(value["ready"] for value in task_reports.values()):
+        global_block_reasons.append("task_coverage_incomplete")
+
+    output = output.expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    write_jsonl(output / "qc-training-blockers.jsonl", blockers)
+    report = {
+        "schema_version": "egoqc-qc-training-readiness-v1",
+        "ready_for_production_training": not global_block_reasons,
+        "records": len(rows),
+        "invalid_rows": invalid_rows,
+        "safe_split_group_ratio": safe_group_ratio,
+        "minimum_safe_split_group_ratio": minimum_safe_group_ratio,
+        "governance_blocked_train_records": governance_blocked,
+        "split_counts": dict(Counter(row.get("distillation", {}).get("split") for row in rows)),
+        "split_group_count": len(split_groups),
+        "supplier_count": len(supplier_splits),
+        "metadata_missing_counts": dict(metadata_missing_counts),
+        "global_block_reasons": global_block_reasons,
+        "tasks": task_reports,
+        "blocker_count": len(blockers),
+        "blockers": str(output / "qc-training-blockers.jsonl"),
+        "manifest": str(manifest.expanduser().resolve()),
+        "code_version": code_version(),
+    }
+    write_json(output / "qc-training-readiness.json", report)
+    return report
 
 
 def smoke_train_qc_student(
@@ -321,6 +651,19 @@ def smoke_train_qc_student(
     return report
 
 
+def _wilson_lower_bound(successes: int, total: int, z: float = 1.96) -> float:
+    if total <= 0:
+        return 0.0
+    probability = successes / total
+    denominator = 1.0 + z * z / total
+    centre = probability + z * z / (2.0 * total)
+    margin = z * math.sqrt(
+        probability * (1.0 - probability) / total
+        + z * z / (4.0 * total * total)
+    )
+    return max(0.0, (centre - margin) / denominator)
+
+
 def evaluate_qc_predictions(
     predictions: Path,
     gold_labels: Path,
@@ -360,7 +703,7 @@ def evaluate_qc_predictions(
             precision = tp / (tp + fp) if tp + fp else 0.0
             recall = tp / (tp + fn) if tp + fn else 0.0
             if tp > 0 and precision >= target_precision:
-                candidates.append((recall, precision, threshold))
+                candidates.append((recall, precision, threshold, tp, fp))
         best = max(candidates, default=None, key=lambda value: (value[0], value[1], value[2]))
         brier = (
             sum((probability - label) ** 2 for probability, label in pairs) / len(pairs)
@@ -377,7 +720,13 @@ def evaluate_qc_predictions(
                 accuracy = sum(label for _, label in bucket) / len(bucket)
                 ece += len(bucket) / len(pairs) * abs(confidence - accuracy)
         enough_gold = positives >= minimum_positives and negatives >= minimum_negatives
-        enabled = enough_gold and best is not None
+        precision_lower_bound = (
+            _wilson_lower_bound(best[3], best[3] + best[4]) if best is not None else None
+        )
+        statistically_supported = (
+            precision_lower_bound is not None and precision_lower_bound >= target_precision
+        )
+        enabled = enough_gold and best is not None and statistically_supported
         task_reports[task] = {
             "gold_samples": len(pairs),
             "gold_positives": positives,
@@ -385,16 +734,23 @@ def evaluate_qc_predictions(
             "required_positives": minimum_positives,
             "required_negatives": minimum_negatives,
             "target_precision": target_precision,
+            "precision_confidence_method": "wilson_two_sided_95_percent_lower_bound",
             "brier_score": brier,
             "ece_10_bin": ece if pairs else None,
             "auto_reject_enabled": enabled,
             "threshold": best[2] if enabled else None,
             "precision": best[1] if enabled else None,
+            "empirical_precision": best[1] if best is not None else None,
+            "precision_95_lower_bound": precision_lower_bound,
             "recall": best[0] if enabled else None,
             "block_reasons": [
                 reason for condition, reason in (
                     (not enough_gold, "insufficient_gold_coverage"),
                     (best is None, "precision_target_not_reached"),
+                    (
+                        best is not None and not statistically_supported,
+                        "precision_confidence_bound_below_target",
+                    ),
                 ) if condition
             ],
         }

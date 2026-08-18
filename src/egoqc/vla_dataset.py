@@ -114,6 +114,8 @@ class VLAPretrainDataset:
 
     def _start_time(self, row: Dict[str, Any]) -> float:
         sampler = row["vla_pretraining"]["clip_sampler"]
+        if sampler.get("fixed_start_s") is not None:
+            return float(sampler["fixed_start_s"])
         window_s = float(sampler["window_s"])
         maximum = max(0.0, float(row.get("duration_s") or 0.0) - window_s)
         identity = f"{self.seed}:{self.epoch}:{row['video_id']}"

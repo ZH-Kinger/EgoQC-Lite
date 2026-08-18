@@ -7,6 +7,16 @@
     "minimum_gold_positives_per_task": 50,
     "minimum_gold_negatives_per_task": 50
   },
+  "training_readiness": {
+    "minimum_train_labeled_per_task": 500,
+    "minimum_train_human_gold_per_task": 100,
+    "minimum_validation_gold_positives_per_task": 100,
+    "minimum_validation_gold_negatives_per_task": 300,
+    "minimum_test_gold_positives_per_task": 200,
+    "minimum_test_gold_negatives_per_task": 1000,
+    "minimum_safe_split_group_ratio": 0.95,
+    "target_precision_note": "Empirical 0.99 is not a statistical guarantee; retain an untouched supplier-held-out test set and report confidence intervals."
+  },
   "rule_only": [
     "schema_error",
     "video_decode_error",
