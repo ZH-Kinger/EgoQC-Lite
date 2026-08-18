@@ -41,6 +41,7 @@ from .distillation import (
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
+from .teacher_training_pool import build_teacher_training_pool
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
@@ -227,6 +228,15 @@ def main() -> None:
     distill_build.add_argument("--hand-screen-root", type=Path)
     distill_build.add_argument("--teacher-root", type=Path)
     distill_build.add_argument("--gold-labels", type=Path)
+    teacher_pool = sub.add_parser(
+        "build-teacher-training-pool",
+        help="把 API 教师 clip 弱标签整理为仅训练用的高置信蒸馏数据",
+    )
+    teacher_pool.add_argument("--queue", type=Path, required=True)
+    teacher_pool.add_argument("--task-config", type=Path, default=Path("config/visual_model_tasks.json"))
+    teacher_pool.add_argument("--output", type=Path, required=True)
+    teacher_pool.add_argument("--minimum-overall-confidence", type=float, default=0.85)
+    teacher_pool.add_argument("--minimum-task-confidence", type=float, default=0.70)
     distill_audit = sub.add_parser(
         "audit-qc-training",
         help="检查 Gold Set 覆盖、分组切分、跨 split 泄漏和训练治理状态",
@@ -730,6 +740,15 @@ def main() -> None:
             hand_screen_root=args.hand_screen_root,
             teacher_root=args.teacher_root,
             gold_labels=args.gold_labels,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-teacher-training-pool":
+        summary = build_teacher_training_pool(
+            args.queue,
+            args.task_config,
+            args.output,
+            minimum_overall_confidence=args.minimum_overall_confidence,
+            minimum_task_confidence=args.minimum_task_confidence,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "smoke-qc-student":
