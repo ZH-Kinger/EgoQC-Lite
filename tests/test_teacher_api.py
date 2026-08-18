@@ -166,6 +166,32 @@ class TeacherApiTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "时间范围越界"):
             validate_teacher_label(label, request)
 
+    def test_normalizes_finding_time_and_preserves_original_range(self):
+        from egoqc.teacher_api import normalize_teacher_label
+
+        request = _queue_row(Path("/video.mp4"), Path("/teacher-label.json"))
+        label = {
+            "findings": [{
+                "category": "blur",
+                "severity": "warning",
+                "start_s": -0.2,
+                "end_s": 8.0,
+            }]
+        }
+
+        normalize_teacher_label(label, request)
+
+        finding = label["findings"][0]
+        self.assertEqual(finding["start_s"], 0.0)
+        self.assertEqual(
+            finding["end_s"],
+            request["clip_end_s"] - request["clip_start_s"],
+        )
+        self.assertEqual(
+            finding["time_normalization"]["reason"],
+            "clamped_to_reviewed_clip",
+        )
+
     def test_extracts_bounded_ordered_frames(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

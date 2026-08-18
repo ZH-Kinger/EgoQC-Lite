@@ -250,6 +250,41 @@ def _parse_json_content(content: str) -> Dict[str, Any]:
     return parsed
 
 
+def normalize_teacher_label(label: Dict[str, Any], request: Dict[str, Any]) -> None:
+    """Clamp non-authoritative finding timestamps while preserving an audit trail.
+
+    Findings are free-text evidence, not training targets. Some VLM responses use
+    the source-video clock or round a clip endpoint upward. Rejecting an otherwise
+    valid structured label would trigger paid retries, so normalize only these
+    timestamps and retain the original values in the artifact.
+    """
+
+    clip_duration = float(request["clip_end_s"]) - float(request["clip_start_s"])
+    findings = label.get("findings", [])
+    if not isinstance(findings, list):
+        return
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        try:
+            start_s = float(finding.get("start_s"))
+            end_s = float(finding.get("end_s"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(start_s) or not math.isfinite(end_s) or end_s < start_s:
+            continue
+        normalized_start = min(clip_duration, max(0.0, start_s))
+        normalized_end = min(clip_duration, max(normalized_start, end_s))
+        if normalized_start != start_s or normalized_end != end_s:
+            finding["time_normalization"] = {
+                "original_start_s": start_s,
+                "original_end_s": end_s,
+                "reason": "clamped_to_reviewed_clip",
+            }
+            finding["start_s"] = normalized_start
+            finding["end_s"] = normalized_end
+
+
 def validate_teacher_label(label: Dict[str, Any], request: Dict[str, Any]) -> None:
     if label.get("schema_version") != "egoqc-visual-teacher-v1":
         raise ValueError("教师输出 schema_version 不兼容")
@@ -402,6 +437,7 @@ def _execute_one(
         if last_error is not None:
             raise last_error
         label = _parse_json_content(_content(response))
+        normalize_teacher_label(label, request)
         validate_teacher_label(label, request)
         label.update({
             "teacher_model": model,
