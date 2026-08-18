@@ -43,6 +43,7 @@ from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
+from .egodex_batch import build_egodex_training_candidates
 from .registry import (
     create_manifest,
     register_datasets,
@@ -284,6 +285,23 @@ def main() -> None:
     adapter_clip_plan.add_argument(
         "--task-config", type=Path, default=Path("config/visual_model_tasks.json")
     )
+    egodex_candidates = sub.add_parser(
+        "build-egodex-candidates",
+        help="按任务均匀抽样 EgoDex，并生成 clean/review/hard-negative 弱标签候选集",
+    )
+    egodex_candidates.add_argument("dataset", type=Path)
+    egodex_candidates.add_argument("--output", type=Path, required=True)
+    egodex_candidates.add_argument("--episodes-per-task", type=int, default=2)
+    egodex_candidates.add_argument("--seed", type=int, default=17)
+    egodex_candidates.add_argument("--workers", type=int, default=8)
+    egodex_candidates.add_argument("--confidence-threshold", type=float, default=0.5)
+    egodex_candidates.add_argument("--minimum-duration-s", type=float, default=5.0)
+    egodex_candidates.add_argument("--minimum-fps", type=float, default=29.97)
+    egodex_candidates.add_argument("--minimum-width", type=int, default=1280)
+    egodex_candidates.add_argument("--minimum-height", type=int, default=720)
+    egodex_candidates.add_argument("--maximum-absence-s", type=float, default=1.0)
+    egodex_candidates.add_argument("--clean-quantile", type=float, default=0.67)
+    egodex_candidates.add_argument("--hard-negative-quantile", type=float, default=0.20)
     adapter_clip_plan.add_argument("--window-s", type=float, default=6.0)
     adapter_clip_plan.add_argument("--maximum-clips", type=int, default=3)
     adapter_clip_plan.add_argument("--confidence-threshold", type=float, default=0.5)
@@ -744,6 +762,23 @@ def main() -> None:
             maximum_clips=args.maximum_clips,
             confidence_threshold=args.confidence_threshold,
             visual_source=args.visual_source,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-egodex-candidates":
+        summary = build_egodex_training_candidates(
+            args.dataset,
+            args.output,
+            episodes_per_task=args.episodes_per_task,
+            seed=args.seed,
+            workers=args.workers,
+            confidence_threshold=args.confidence_threshold,
+            minimum_duration_s=args.minimum_duration_s,
+            minimum_fps=args.minimum_fps,
+            minimum_width=args.minimum_width,
+            minimum_height=args.minimum_height,
+            maximum_absence_s=args.maximum_absence_s,
+            clean_quantile=args.clean_quantile,
+            hard_negative_quantile=args.hard_negative_quantile,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
