@@ -45,6 +45,7 @@ from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verif
 from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
 from .egodex_review_batch import build_egodex_review_batch
+from .multisource_discovery import discover_lerobot_roots
 from .registry import (
     create_manifest,
     register_datasets,
@@ -321,6 +322,15 @@ def main() -> None:
     egodex_review.add_argument("--maximum-hard-negative", type=int)
     egodex_review.add_argument("--maximum-review", type=int, default=128)
     egodex_review.add_argument("--seed", type=int, default=17)
+    discover_sources = sub.add_parser(
+        "discover-lerobot-roots",
+        help="任务均衡发现 task/dataset LeRobot 根，清单只写 workspace",
+    )
+    discover_sources.add_argument("source_root", type=Path)
+    discover_sources.add_argument("--output", type=Path, required=True)
+    discover_sources.add_argument("--maximum-per-task", type=int, default=2)
+    discover_sources.add_argument("--workers", type=int, default=16)
+    discover_sources.add_argument("--seed", type=int, default=17)
     egodex_candidates.add_argument(
         "--full-profile", action="store_true",
         help="加载完整关节变换；默认仅读 confidence 和视频头以降低 OSS I/O",
@@ -827,6 +837,15 @@ def main() -> None:
             maximum_clean=args.maximum_clean,
             maximum_hard_negative=args.maximum_hard_negative,
             maximum_review=args.maximum_review,
+            seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "discover-lerobot-roots":
+        summary = discover_lerobot_roots(
+            args.source_root,
+            args.output,
+            maximum_per_task=args.maximum_per_task,
+            workers=args.workers,
             seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
