@@ -310,6 +310,13 @@ def main() -> None:
         help="加载完整关节变换；默认仅读 confidence 和视频头以降低 OSS I/O",
     )
     egodex_candidates.add_argument("--checkpoint-every", type=int, default=25)
+    egodex_candidates.add_argument(
+        "--inventory-cache", type=Path,
+        help="workspace 中可复用的 OSS 文件清单；默认 <output>/inventory.jsonl",
+    )
+    egodex_candidates.add_argument(
+        "--refresh-inventory", action="store_true", help="重新枚举源目录并刷新 inventory"
+    )
     adapter_clip_plan.add_argument("--window-s", type=float, default=6.0)
     adapter_clip_plan.add_argument("--maximum-clips", type=int, default=3)
     adapter_clip_plan.add_argument("--confidence-threshold", type=float, default=0.5)
@@ -790,6 +797,8 @@ def main() -> None:
             resume=args.resume,
             fast_profile=not args.full_profile,
             checkpoint_every=args.checkpoint_every,
+            inventory_cache=args.inventory_cache,
+            refresh_inventory=args.refresh_inventory,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":

@@ -56,6 +56,27 @@ class EgoDexBatchTests(unittest.TestCase):
             self.assertEqual(len(first), 4)
             self.assertEqual({row["task"] for row in first}, {"pick", "place"})
 
+    def test_inventory_cache_avoids_relisting_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "dataset"
+            cache = Path(temporary) / "cache" / "inventory.jsonl"
+            task = root / "part1" / "pick"
+            task.mkdir(parents=True)
+            (task / "0.hdf5").touch()
+            first = select_egodex_episodes(
+                root, episodes_per_task=5, inventory_cache=cache
+            )
+            (task / "1.hdf5").touch()
+            cached = select_egodex_episodes(
+                root, episodes_per_task=5, inventory_cache=cache
+            )
+            refreshed = select_egodex_episodes(
+                root, episodes_per_task=5, inventory_cache=cache, refresh_inventory=True
+            )
+            self.assertEqual(len(first), 1)
+            self.assertEqual(cached, first)
+            self.assertEqual(len(refreshed), 2)
+
     def test_batch_keeps_failures_and_marks_candidates_as_weak(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "dataset"

@@ -6,7 +6,7 @@ import math
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import numpy as np
 
@@ -48,36 +48,60 @@ def select_egodex_episodes(
     episodes_per_task: int = 2,
     seed: int = 17,
     partitions: Sequence[str] = DEFAULT_PARTITIONS,
+    inventory_cache: Optional[Path] = None,
+    refresh_inventory: bool = False,
 ) -> List[Dict[str, Any]]:
     """Select a reproducible, task-balanced pilot without recursively walking NFS."""
     if episodes_per_task <= 0:
         raise ValueError("episodes_per_task 必须大于 0")
     dataset = dataset.expanduser().resolve()
-    selected: List[Dict[str, Any]] = []
-    for partition in partitions:
-        partition_root = dataset / partition
-        if not partition_root.is_dir():
-            continue
-        for task_root in sorted(path for path in partition_root.iterdir() if path.is_dir()):
-            candidates = sorted(
-                (
-                    path
-                    for path in task_root.iterdir()
-                    if path.is_file() and path.suffix.lower() in {".hdf5", ".h5"}
-                ),
-                key=lambda path: _stable_rank(path.relative_to(dataset).as_posix(), seed),
+    inventory_cache = inventory_cache.expanduser().resolve() if inventory_cache else None
+    inventory: List[Dict[str, Any]] = []
+    if inventory_cache and inventory_cache.is_file() and not refresh_inventory:
+        inventory = [
+            json.loads(line)
+            for line in inventory_cache.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        roots = {str(row.get("dataset")) for row in inventory}
+        if roots != {str(dataset)}:
+            raise ValueError(
+                f"inventory 数据集不匹配: cache={sorted(roots)}, requested={dataset}"
             )
-            for hdf5_path in candidates[:episodes_per_task]:
-                relative = hdf5_path.relative_to(dataset)
-                selected.append(
-                    {
+    else:
+        for partition in partitions:
+            partition_root = dataset / partition
+            if not partition_root.is_dir():
+                continue
+            for task_root in sorted(path for path in partition_root.iterdir() if path.is_dir()):
+                for hdf5_path in task_root.iterdir():
+                    if not hdf5_path.is_file() or hdf5_path.suffix.lower() not in {".hdf5", ".h5"}:
+                        continue
+                    relative = hdf5_path.relative_to(dataset)
+                    inventory.append({
+                        "schema_version": "egoqc-egodex-inventory-v1",
+                        "dataset": str(dataset),
                         "partition": partition,
                         "task": task_root.name,
                         "episode_id": relative.with_suffix("").as_posix(),
                         "hdf5_path": str(hdf5_path),
                         "video_path": str(hdf5_path.with_suffix(".mp4")),
-                    }
-                )
+                    })
+        inventory.sort(key=lambda row: row["episode_id"])
+        if inventory_cache:
+            write_jsonl(inventory_cache, inventory)
+
+    grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = {}
+    allowed = set(partitions)
+    for row in inventory:
+        if row["partition"] in allowed:
+            grouped.setdefault((row["partition"], row["task"]), []).append(row)
+    selected: List[Dict[str, Any]] = []
+    for key in sorted(grouped):
+        candidates = sorted(
+            grouped[key], key=lambda row: _stable_rank(row["episode_id"], seed)
+        )
+        selected.extend(candidates[:episodes_per_task])
     return selected
 
 
@@ -467,6 +491,8 @@ def build_egodex_training_candidates(
     resume: bool = False,
     fast_profile: bool = True,
     checkpoint_every: int = 25,
+    inventory_cache: Optional[Path] = None,
+    refresh_inventory: bool = False,
 ) -> Dict[str, Any]:
     """Build read-only EgoDex QC candidates and preserve every failure as evidence."""
     if workers <= 0:
@@ -479,12 +505,21 @@ def build_egodex_training_candidates(
     output = output.expanduser().resolve()
     ensure_readonly_source_boundary(dataset, output)
     output.mkdir(parents=True, exist_ok=True)
+    inventory_cache = (
+        inventory_cache.expanduser().resolve()
+        if inventory_cache else output / "inventory.jsonl"
+    )
+    ensure_readonly_source_boundary(dataset, inventory_cache)
+    run_started = time.monotonic()
     selected = select_egodex_episodes(
         dataset,
         episodes_per_task=episodes_per_task,
         seed=seed,
         partitions=partitions,
+        inventory_cache=inventory_cache,
+        refresh_inventory=refresh_inventory,
     )
+    inventory_elapsed_s = time.monotonic() - run_started
     profiles: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
     if resume:
@@ -557,6 +592,9 @@ def build_egodex_training_candidates(
                     "episodes_per_s": rate,
                     "eta_s": remaining / rate if rate > 0 else None,
                     "fast_profile": fast_profile,
+                    "inventory_cache": str(inventory_cache),
+                    "inventory_elapsed_s": inventory_elapsed_s,
+                    "total_elapsed_s": time.monotonic() - run_started,
                     "source_readonly": True,
                     "complete": remaining == 0,
                 })
@@ -592,6 +630,11 @@ def build_egodex_training_candidates(
         "output": str(output),
         "source_readonly": True,
         "profile_mode": "confidence_only" if fast_profile else "full_canonical",
+        "inventory": {
+            "cache": str(inventory_cache),
+            "refresh": refresh_inventory,
+            "selection_elapsed_s": inventory_elapsed_s,
+        },
         "selection": {
             "seed": seed,
             "episodes_per_task": episodes_per_task,
