@@ -3,17 +3,39 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Sequence
 
 import numpy as np
 
-from .adapters import EgoDexHDF5Adapter
+from .adapters import EgoDexHDF5Adapter, _json_safe
 from .report import write_json, write_jsonl
 
 
 DEFAULT_PARTITIONS = ("extra", "part1", "part2", "part3", "part4", "part5")
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def ensure_readonly_source_boundary(dataset: Path, output: Path) -> None:
+    """Refuse derived writes inside a source tree or the deployed raw-data mount."""
+    dataset = dataset.expanduser().resolve()
+    output = output.expanduser().resolve()
+    if _is_within(output, dataset):
+        raise ValueError(f"输出目录不能位于只读源数据集内: {output}")
+    raw_mount = Path("/mnt/data")
+    if _is_within(dataset, raw_mount) and _is_within(output, raw_mount):
+        raise ValueError(
+            f"源数据位于受保护挂载 {raw_mount}；派生产物必须写到 /mnt/workspace 等独立目录"
+        )
 
 
 def _stable_rank(value: str, seed: int) -> str:
@@ -148,7 +170,6 @@ def _profile_one(
         hand["joint_confidence_p05"] or 0.0 for hand in active_hands
     ]))
     visible_ratio = float(np.mean(any_visible)) if any_visible.size else 0.0
-    # This is only a within-batch ranking signal. It is not an accuracy estimate.
     annotation_score = float(np.clip(
         0.30 * visible_ratio
         + 0.30 * joint_ratio
@@ -184,6 +205,196 @@ def _profile_one(
     }
 
 
+def _egodex_joint_names(side: str) -> List[str]:
+    prefix = side.lower()
+    names = [f"{prefix}Hand"]
+    names.extend(
+        f"{prefix}Thumb{segment}"
+        for segment in ("Knuckle", "IntermediateBase", "IntermediateTip", "Tip")
+    )
+    names.extend(
+        f"{prefix}{finger}Finger{segment}"
+        for finger in ("Index", "Middle", "Ring", "Little")
+        for segment in (
+            "Metacarpal", "Knuckle", "IntermediateBase", "IntermediateTip", "Tip"
+        )
+    )
+    return names
+
+
+def _confidence_summary(
+    side: str, confidences: np.ndarray, threshold: float
+) -> Dict[str, Any]:
+    root = confidences[:, 0]
+    finite = confidences[np.isfinite(confidences)]
+    valid = np.isfinite(root) & (root >= threshold)
+    return {
+        "side": side,
+        "joint_count": int(confidences.shape[1]),
+        "joint_names": _egodex_joint_names(side),
+        "valid_frames": int(np.count_nonzero(valid)),
+        "valid_ratio": float(np.mean(valid)) if len(valid) else 0.0,
+        "valid_semantics": "root_presence_above_confidence_threshold",
+        "finite_frames": None,
+        "root_confidence_mean": float(np.mean(root)) if root.size else None,
+        "joint_confidence_mean": float(np.mean(finite)) if finite.size else None,
+        "joint_confidence_p05": float(np.quantile(finite, 0.05)) if finite.size else None,
+        "confidence_threshold": threshold,
+        "all_joints_confident_ratio": float(
+            np.mean(np.all(confidences >= threshold, axis=1))
+        ) if confidences.size else None,
+        "joint_values_confident_ratio": float(np.mean(confidences >= threshold))
+        if confidences.size else None,
+        "local_origin": "wrist_root_transform; non-MANO source joint hierarchy",
+        "source_model": "EgoDex joint SE(3)",
+        "profile_mode": "confidence_only",
+    }
+
+
+def _profile_one_fast(
+    dataset: Path,
+    selected: Dict[str, Any],
+    *,
+    confidence_threshold: float,
+    minimum_duration_s: float,
+    minimum_fps: float,
+    minimum_width: int,
+    minimum_height: int,
+    maximum_absence_s: float,
+) -> Dict[str, Any]:
+    """Profile an episode without loading joint/camera 4x4 transform tensors."""
+    try:
+        import av
+        import h5py
+    except ImportError as error:
+        raise RuntimeError("快速 EgoDex 画像需要 h5py 和 PyAV") from error
+
+    hdf5_path = Path(selected["hdf5_path"])
+    video_path = Path(selected["video_path"])
+    if not video_path.is_file():
+        raise FileNotFoundError(video_path)
+    with h5py.File(hdf5_path, "r") as handle:
+        required = ("camera/intrinsic", "transforms/camera", "transforms", "confidences")
+        missing = [name for name in required if name not in handle]
+        if missing:
+            raise ValueError(f"EgoDex HDF5 缺少字段: {missing}")
+        frame_count = int(handle["transforms/camera"].shape[0])
+        hand_confidences: Dict[str, np.ndarray] = {}
+        for side in ("left", "right"):
+            names = _egodex_joint_names(side)
+            missing_transforms = [name for name in names if name not in handle["transforms"]]
+            missing_confidences = [name for name in names if name not in handle["confidences"]]
+            if missing_transforms:
+                raise ValueError(f"{side} 缺少 transform: {missing_transforms}")
+            if missing_confidences:
+                raise ValueError(f"{side} 缺少 confidence: {missing_confidences}")
+            values = np.stack(
+                [np.asarray(handle["confidences"][name], dtype=np.float64) for name in names],
+                axis=1,
+            )
+            if values.shape[0] != frame_count:
+                raise ValueError(
+                    f"{side} confidence 帧数={values.shape[0]}，camera 帧数={frame_count}"
+                )
+            hand_confidences[side] = values
+        labels = {
+            key: _json_safe(handle.attrs[key])
+            for key in (
+                "task", "llm_description", "llm_description2", "llm_objects",
+                "llm_verbs", "llm_type",
+            )
+            if key in handle.attrs
+        }
+
+    with av.open(str(video_path)) as container:
+        if not container.streams.video:
+            raise ValueError(f"MP4 没有视频流: {video_path}")
+        stream = container.streams.video[0]
+        if not stream.average_rate:
+            raise ValueError(f"MP4 缺少 FPS: {video_path}")
+        fps = float(stream.average_rate)
+        reported_frames = int(stream.frames or 0)
+        if reported_frames and reported_frames != frame_count:
+            raise ValueError(
+                f"HDF5 frames={frame_count}，MP4 reported_frames={reported_frames}"
+            )
+        width = int(stream.codec_context.width)
+        height = int(stream.codec_context.height)
+        video = {
+            "path": str(video_path),
+            "fps": fps,
+            "frame_count": frame_count,
+            "width": width,
+            "height": height,
+            "codec": str(stream.codec_context.name),
+            "pix_fmt": str(stream.codec_context.pix_fmt or "") or None,
+            "audio_streams": len(container.streams.audio),
+        }
+
+    masks = {
+        side: np.isfinite(values[:, 0]) & (values[:, 0] >= confidence_threshold)
+        for side, values in hand_confidences.items()
+    }
+    any_visible = masks["left"] | masks["right"]
+    duration_s = frame_count / fps if fps > 0 else 0.0
+    longest_visible_s = _longest_run(any_visible, True) / fps
+    longest_absence_s = _longest_run(any_visible, False) / fps
+    eligible_visible_s = _eligible_visible_frames(
+        any_visible, int(math.ceil(minimum_duration_s * fps))
+    ) / fps
+    gates = {
+        "duration_at_least_minimum": duration_s >= minimum_duration_s,
+        "fps_at_least_minimum": fps >= minimum_fps,
+        "resolution_at_least_720p": width >= minimum_width and height >= minimum_height,
+        "continuous_hand_visibility_at_least_minimum": longest_visible_s >= minimum_duration_s,
+        "hand_absence_not_over_limit": longest_absence_s <= maximum_absence_s,
+        "no_audio": video["audio_streams"] == 0,
+    }
+    hand_summaries = {
+        side: _confidence_summary(side, values, confidence_threshold)
+        for side, values in hand_confidences.items()
+    }
+    active = [hand for hand in hand_summaries.values() if hand["valid_ratio"] >= 0.05]
+    if not active:
+        active = list(hand_summaries.values())
+    visible_ratio = float(np.mean(any_visible)) if any_visible.size else 0.0
+    annotation_score = float(np.clip(
+        0.30 * visible_ratio
+        + 0.30 * np.mean([hand["joint_values_confident_ratio"] or 0.0 for hand in active])
+        + 0.20 * np.mean([hand["all_joints_confident_ratio"] or 0.0 for hand in active])
+        + 0.10 * np.mean([hand["joint_confidence_mean"] or 0.0 for hand in active])
+        + 0.10 * np.mean([hand["joint_confidence_p05"] or 0.0 for hand in active]),
+        0.0,
+        1.0,
+    ))
+    return {
+        **selected,
+        "source_format": "egodex_hdf5",
+        "source_readonly": True,
+        "labels": labels,
+        "capabilities": EgoDexHDF5Adapter.capabilities().to_dict(),
+        "video": video,
+        "duration_s": duration_s,
+        "hand_metrics": {
+            "any_hand_visible_ratio": visible_ratio,
+            "longest_visible_s": longest_visible_s,
+            "longest_absence_s": longest_absence_s,
+            "eligible_visible_s": eligible_visible_s,
+            **hand_summaries,
+        },
+        "hard_gates": gates,
+        "hard_pass": all(gates.values()),
+        "annotation_score": annotation_score,
+        "annotation_score_semantics": (
+            "weak within-batch ranking signal; not ground-truth accuracy or acceptance proof"
+        ),
+        "provenance": {
+            "adapter": "egodex_hdf5_fast_profile",
+            "readonly": True,
+            "loaded_arrays": "joint_confidences_only",
+            "skipped_arrays": "camera_and_joint_transform_tensors",
+        },
+    }
 def _assign_tiers(
     profiles: List[Dict[str, Any]],
     *,
@@ -254,14 +465,19 @@ def build_egodex_training_candidates(
     hard_negative_quantile: float = 0.20,
     partitions: Sequence[str] = DEFAULT_PARTITIONS,
     resume: bool = False,
+    fast_profile: bool = True,
+    checkpoint_every: int = 25,
 ) -> Dict[str, Any]:
     """Build read-only EgoDex QC candidates and preserve every failure as evidence."""
     if workers <= 0:
         raise ValueError("workers 必须大于 0")
+    if checkpoint_every <= 0:
+        raise ValueError("checkpoint_every 必须大于 0")
     if not 0.0 <= hard_negative_quantile < clean_quantile <= 1.0:
         raise ValueError("质量分位需满足 0 <= hard-negative < clean <= 1")
     dataset = dataset.expanduser().resolve()
     output = output.expanduser().resolve()
+    ensure_readonly_source_boundary(dataset, output)
     output.mkdir(parents=True, exist_ok=True)
     selected = select_egodex_episodes(
         dataset,
@@ -295,9 +511,12 @@ def build_egodex_training_candidates(
         "minimum_height": minimum_height,
         "maximum_absence_s": maximum_absence_s,
     }
+    started = time.monotonic()
+    completed_this_run = 0
+    profile_function = _profile_one_fast if fast_profile else _profile_one
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
-            executor.submit(_profile_one, dataset, row, **kwargs): row
+            executor.submit(profile_function, dataset, row, **kwargs): row
             for row in pending
         }
         for future in as_completed(futures):
@@ -313,6 +532,33 @@ def build_egodex_training_candidates(
                     "tier_reason": "adapter_or_integrity_failure",
                     "label_status": "weak_candidate_not_gold",
                     "visual_model_eligible": False,
+                })
+            completed_this_run += 1
+            if completed_this_run % checkpoint_every == 0 or completed_this_run == len(pending):
+                elapsed_s = max(time.monotonic() - started, 1e-6)
+                rate = completed_this_run / elapsed_s
+                remaining = len(pending) - completed_this_run
+                write_jsonl(
+                    output / "profiles.partial.jsonl",
+                    sorted(profiles, key=lambda row: row["episode_id"]),
+                )
+                write_jsonl(
+                    output / "errors.partial.jsonl",
+                    sorted(errors, key=lambda row: row["episode_id"]),
+                )
+                write_json(output / "progress.json", {
+                    "schema_version": "egoqc-egodex-progress-v1",
+                    "selected": len(selected),
+                    "reused": len(selected) - len(pending),
+                    "pending_at_start": len(pending),
+                    "completed_this_run": completed_this_run,
+                    "remaining": remaining,
+                    "elapsed_s": elapsed_s,
+                    "episodes_per_s": rate,
+                    "eta_s": remaining / rate if rate > 0 else None,
+                    "fast_profile": fast_profile,
+                    "source_readonly": True,
+                    "complete": remaining == 0,
                 })
     profiles.sort(key=lambda row: row["episode_id"])
     errors.sort(key=lambda row: row["episode_id"])
@@ -345,6 +591,7 @@ def build_egodex_training_candidates(
         "dataset": str(dataset),
         "output": str(output),
         "source_readonly": True,
+        "profile_mode": "confidence_only" if fast_profile else "full_canonical",
         "selection": {
             "seed": seed,
             "episodes_per_task": episodes_per_task,

@@ -6,7 +6,11 @@ from unittest.mock import patch
 import numpy as np
 
 from egoqc.canonical import CanonicalEpisode, CapabilityManifest, HandTrack, VideoReference
-from egoqc.egodex_batch import build_egodex_training_candidates, select_egodex_episodes
+from egoqc.egodex_batch import (
+    build_egodex_training_candidates,
+    ensure_readonly_source_boundary,
+    select_egodex_episodes,
+)
 
 
 def _canonical(episode_id: str, score: float, *, width: int = 1280) -> CanonicalEpisode:
@@ -76,6 +80,7 @@ class EgoDexBatchTests(unittest.TestCase):
                     workers=2,
                     clean_quantile=0.67,
                     hard_negative_quantile=0.2,
+                    fast_profile=False,
                 )
             self.assertEqual(summary["selection"]["selected"], 4)
             self.assertEqual(summary["profiled"], 3)
@@ -95,9 +100,16 @@ class EgoDexBatchTests(unittest.TestCase):
                     episodes_per_task=4,
                     workers=2,
                     resume=True,
+                    fast_profile=False,
                 )
             self.assertEqual(resumed["selection"]["reused"], 4)
             self.assertEqual(resumed["selection"]["processed_this_run"], 0)
+
+    def test_output_inside_source_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            with self.assertRaisesRegex(ValueError, "只读源数据集"):
+                ensure_readonly_source_boundary(root, root / "derived")
 
 
 if __name__ == "__main__":
