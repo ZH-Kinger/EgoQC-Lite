@@ -44,6 +44,7 @@ from .teacher_api import run_teacher_api
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
+from .egodex_review_batch import build_egodex_review_batch
 from .registry import (
     create_manifest,
     register_datasets,
@@ -305,6 +306,21 @@ def main() -> None:
     egodex_candidates.add_argument(
         "--resume", action="store_true", help="复用 output 中已完成 episode，只处理新增抽样"
     )
+    egodex_review = sub.add_parser(
+        "build-egodex-review-batch",
+        help="从分层画像生成任务均衡的人工审核与视觉教师队列，不解码或复制源视频",
+    )
+    egodex_review.add_argument("--profiles", type=Path, required=True)
+    egodex_review.add_argument("--output", type=Path, required=True)
+    egodex_review.add_argument("--dataset", type=Path)
+    egodex_review.add_argument(
+        "--task-config", type=Path, default=Path("config/visual_model_tasks.json")
+    )
+    egodex_review.add_argument("--window-s", type=float, default=6.0)
+    egodex_review.add_argument("--maximum-clean", type=int)
+    egodex_review.add_argument("--maximum-hard-negative", type=int)
+    egodex_review.add_argument("--maximum-review", type=int, default=128)
+    egodex_review.add_argument("--seed", type=int, default=17)
     egodex_candidates.add_argument(
         "--full-profile", action="store_true",
         help="加载完整关节变换；默认仅读 confidence 和视频头以降低 OSS I/O",
@@ -799,6 +815,19 @@ def main() -> None:
             checkpoint_every=args.checkpoint_every,
             inventory_cache=args.inventory_cache,
             refresh_inventory=args.refresh_inventory,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-egodex-review-batch":
+        summary = build_egodex_review_batch(
+            args.profiles,
+            args.task_config,
+            args.output,
+            dataset=args.dataset,
+            window_s=args.window_s,
+            maximum_clean=args.maximum_clean,
+            maximum_hard_negative=args.maximum_hard_negative,
+            maximum_review=args.maximum_review,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
