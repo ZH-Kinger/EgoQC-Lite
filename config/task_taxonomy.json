@@ -16,7 +16,22 @@
     "press_switch": ["press", "push button", "switch", "toggle", "按", "开关"],
     "tie_untie": ["tie", "untie", "knot", "lace", "系", "解开", "打结"],
     "write_draw": ["write", "draw", "paint", "写", "画", "涂"],
-    "adjust_align": ["adjust", "align", "arrange", "organize", "disorganized", "调整", "对齐", "整理"]
+    "adjust_align": ["adjust", "align", "arrange", "organize", "disorganized", "declutter", "stock", "unstock", "sort", "调整", "对齐", "整理", "分类"],
+    "food_preparation": ["boil", "fry", "cook", "serve", "sandwich", "knead", "烹饪", "煮", "煎", "揉"],
+    "personal_care": ["blowdry", "braid", "unbraid", "makeup", "dry hands", "吹发", "编发", "化妆", "擦干"],
+    "connect_disconnect": ["charge", "uncharge", "battery", "batteries", "connect", "disconnect", "充电", "电池", "连接", "断开"],
+    "deformable_shape": ["crumple", "flatten", "knead", "knit", "braid", "slime", "揉皱", "压平", "编织", "塑形"],
+    "deal_sort_items": ["deal", "gather cards", "sleeve", "sort", "collect objects", "发牌", "收牌", "分类", "收集"],
+    "dispense_scoop": ["dispense", "scoop", "dump ice", "load ice", "舀", "分配", "倾倒冰"],
+    "play_game_instrument": ["play", "piano", "mancala", "reversi", "connect four", "rubiks", "fidget", "toy", "玩", "钢琴", "魔方"],
+    "input_control": ["point and click", "remote", "keyboard", "type", "鼠标", "遥控器", "键盘", "打字"],
+    "flip_turn": ["flip", "turn pages", "pages", "翻页", "翻转"],
+    "throw_catch_roll": ["throw", "catch", "roll ball", "roll dice", "投掷", "接住", "滚球", "掷骰子"],
+    "measure": ["measure", "weigh", "测量", "称重"],
+    "sweep_rake": ["sweep", "rake", "dustpan", "zen garden", "扫", "耙", "簸箕"],
+    "wrap_unwrap": ["wrap", "unwrap", "包装", "拆包"],
+    "zip_unzip": ["zip", "unzip", "拉链"],
+    "clip_staple": ["clip", "unclip", "staple", "stamp paper", "夹", "订", "盖章"]
   },
   "object_affordances": {
     "container": ["bottle", "cup", "box", "jar", "drawer", "container", "瓶", "杯", "盒", "罐"],
@@ -27,13 +42,17 @@
     "electronic": ["screen", "phone", "computer", "plug", "headphone", "屏幕", "手机", "电脑", "插头"],
     "wearable": ["helmet", "shoe", "glove", "strap", "clothes", "头盔", "鞋", "手套", "衣服"],
     "food": ["food", "fruit", "vegetable", "bread", "meal", "食物", "水果", "蔬菜", "面包"],
-    "furniture": ["chair", "desk", "table", "rack", "shelf", "椅", "桌", "架"]
+    "furniture": ["chair", "desk", "table", "rack", "shelf", "椅", "桌", "架"],
+    "game_or_instrument": ["cards", "dice", "coin", "piano", "mancala", "reversi", "connect four", "rubiks", "toy", "牌", "骰子", "硬币", "钢琴", "魔方", "玩具"],
+    "personal_care_item": ["hair", "makeup", "hands", "头发", "化妆", "手"]
   },
   "fine_manipulation_primitives": [
     "insert_remove", "assemble_disassemble", "fasten_unfasten", "screw_unscrew",
-    "tie_untie", "write_draw"
+    "tie_untie", "write_draw", "connect_disconnect", "personal_care",
+    "input_control", "measure", "clip_staple", "zip_unzip"
   ],
   "likely_bimanual_primitives": [
-    "assemble_disassemble", "fasten_unfasten", "fold_unfold", "tie_untie"
+    "assemble_disassemble", "fasten_unfasten", "fold_unfold", "tie_untie",
+    "deformable_shape", "wrap_unwrap", "zip_unzip", "personal_care"
   ]
 }

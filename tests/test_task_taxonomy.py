@@ -23,6 +23,22 @@ class TaskTaxonomyTests(unittest.TestCase):
         self.assertEqual(label["interaction_primitives"], ["unknown"])
         self.assertTrue(label["requires_semantic_review"])
 
+    def test_extended_egocentric_task_families_are_covered(self):
+        taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())
+        examples = {
+            "boil_serve_egg": "food_preparation",
+            "braid_unbraid": "personal_care",
+            "charge_uncharge_airpods": "connect_disconnect",
+            "play_piano": "play_game_instrument",
+            "type_keyboard": "input_control",
+            "zip_unzip_bag": "zip_unzip",
+        }
+        for task, expected in examples.items():
+            with self.subTest(task=task):
+                label = classify_task(task, taxonomy)
+                self.assertIn(expected, label["interaction_primitives"])
+                self.assertFalse(label["requires_semantic_review"])
+
     def test_batch_enriches_records(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
