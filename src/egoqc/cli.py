@@ -39,6 +39,7 @@ from .distillation import (
     smoke_train_qc_student,
 )
 from .clip_selection import plan_qc_clips
+from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
@@ -273,6 +274,19 @@ def main() -> None:
     clip_plan.add_argument("--seed", type=int, default=17)
     clip_plan.add_argument("--source-dataset")
     clip_plan.add_argument("--supplier-id")
+    adapter_clip_plan = sub.add_parser(
+        "plan-adapter-clips",
+        help="从 EgoDex 等只读 adapter 样本生成低成本视觉教师队列",
+    )
+    adapter_clip_plan.add_argument("dataset", type=Path)
+    adapter_clip_plan.add_argument("--episode", required=True)
+    adapter_clip_plan.add_argument("--output", type=Path, required=True)
+    adapter_clip_plan.add_argument(
+        "--task-config", type=Path, default=Path("config/visual_model_tasks.json")
+    )
+    adapter_clip_plan.add_argument("--window-s", type=float, default=6.0)
+    adapter_clip_plan.add_argument("--maximum-clips", type=int, default=3)
+    adapter_clip_plan.add_argument("--confidence-threshold", type=float, default=0.5)
     teacher_run = sub.add_parser(
         "run-teacher-api",
         help="断点执行视觉教师队列；密钥只从环境变量读取",
@@ -714,6 +728,17 @@ def main() -> None:
             max_requests=args.max_requests,
             input_price_per_million=args.input_price_per_million,
             output_price_per_million=args.output_price_per_million,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "plan-adapter-clips":
+        summary = plan_adapter_clips(
+            args.dataset,
+            args.episode,
+            args.output,
+            args.task_config,
+            window_s=args.window_s,
+            maximum_clips=args.maximum_clips,
+            confidence_threshold=args.confidence_threshold,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
