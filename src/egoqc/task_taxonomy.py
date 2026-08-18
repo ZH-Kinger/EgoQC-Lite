@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from collections import Counter
 from pathlib import Path
@@ -88,9 +89,35 @@ def classify_task_records(
         enriched.append({**row, "task_taxonomy": label, "taxonomy_source_id": source_id})
 
     labels = sorted(unique.values(), key=lambda row: row["normalized_task"])
+    allowed_primitives = sorted(taxonomy["interaction_primitives"])
+    semantic_review = [
+        {
+            "schema_version": "egoqc-task-semantic-review-v1",
+            "request_id": "task-" + hashlib.sha256(
+                f"{source_id}:{label['normalized_task']}".encode()
+            ).hexdigest()[:16],
+            "source_id": source_id,
+            "task_text": label["task_text"],
+            "normalized_task": label["normalized_task"],
+            "allowed_interaction_primitives": allowed_primitives,
+            "required_response": {
+                "interaction_primitives": "list of allowed values or proposed_new_primitive",
+                "object_affordances": "list[string]",
+                "manipulation_scale": "fine|gross|unknown",
+                "hand_mode": "likely_unimanual|likely_bimanual|unknown",
+                "temporal_complexity": "atomic|short_sequence|composite|unknown",
+                "confidence": "float[0,1]",
+                "reason": "short evidence from task text only",
+            },
+            "video_required": False,
+            "status": "pending",
+        }
+        for label in labels if label["requires_semantic_review"]
+    ]
     output.mkdir(parents=True, exist_ok=True)
     write_jsonl(output / "task-taxonomy.jsonl", labels)
     write_jsonl(output / "records-with-taxonomy.jsonl", enriched)
+    write_jsonl(output / "semantic-review-tasks.jsonl", semantic_review)
     primitive_counts = Counter(
         primitive for label in labels for primitive in label["interaction_primitives"]
     )
@@ -106,6 +133,8 @@ def classify_task_records(
         "primitive_counts_unique_tasks": dict(primitive_counts.most_common()),
         "taxonomy": str(output / "task-taxonomy.jsonl"),
         "enriched_records": str(output / "records-with-taxonomy.jsonl"),
+        "semantic_review_queue": str(output / "semantic-review-tasks.jsonl"),
+        "semantic_review_video_required": False,
     }
     write_json(output / "summary.json", summary)
     return summary

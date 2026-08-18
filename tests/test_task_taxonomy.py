@@ -55,6 +55,28 @@ class TaskTaxonomyTests(unittest.TestCase):
             self.assertEqual(summary["classified_tasks"], 1)
             row = json.loads((output / "records-with-taxonomy.jsonl").read_text())
             self.assertIn("fold_unfold", row["task_taxonomy"]["interaction_primitives"])
+            self.assertEqual(
+                (output / "semantic-review-tasks.jsonl").read_text(), ""
+            )
+
+    def test_unknown_batch_writes_text_only_semantic_queue(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "records.jsonl"
+            output = root / "output"
+            source.write_text(json.dumps({"task_group": "Special_Action_X"}) + "\n")
+            summary = classify_task_records(
+                source,
+                Path("config/task_taxonomy.json"),
+                output,
+                task_field="task_group",
+                source_id="test",
+            )
+            queue = json.loads((output / "semantic-review-tasks.jsonl").read_text())
+            self.assertEqual(summary["semantic_review_tasks"], 1)
+            self.assertFalse(summary["semantic_review_video_required"])
+            self.assertFalse(queue["video_required"])
+            self.assertEqual(queue["status"], "pending")
 
 
 if __name__ == "__main__":
