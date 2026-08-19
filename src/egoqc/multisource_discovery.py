@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -43,6 +44,26 @@ def _inspect_root(root: Path, source_root: Path) -> Dict[str, Any]:
     }
 
 
+def _candidate_roots(
+    task_root: Path,
+    source_root: Path,
+    maximum_per_task: Optional[int],
+    seed: int,
+) -> List[Path]:
+    # os.scandir preserves the directory-entry type returned by OSS/CPFS and
+    # avoids a separate remote stat for every UUID directory.
+    with os.scandir(task_root) as entries:
+        candidates = [Path(entry.path) for entry in entries if entry.is_dir()]
+    candidates.sort(
+        key=lambda path: _rank(path.relative_to(source_root), seed)
+    )
+    return (
+        candidates
+        if maximum_per_task is None
+        else candidates[:maximum_per_task]
+    )
+
+
 def discover_lerobot_roots(
     source_root: Path,
     output: Path,
@@ -60,21 +81,35 @@ def discover_lerobot_roots(
     output = output.expanduser().resolve()
     ensure_readonly_source_boundary(source_root, output)
 
+    task_roots = sorted(path for path in source_root.iterdir() if path.is_dir())
     roots: List[Path] = []
-    for task_root in sorted(path for path in source_root.iterdir() if path.is_dir()):
-        candidates = [
-            path for path in task_root.iterdir()
-            if path.is_dir() and (path / "meta" / "info.json").is_file()
-        ]
-        candidates.sort(
-            key=lambda path: _rank(path.relative_to(source_root), seed)
-        )
-        roots.extend(
-            candidates if maximum_per_task is None else candidates[:maximum_per_task]
-        )
+    errors: List[Dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(
+                _candidate_roots,
+                task_root,
+                source_root,
+                maximum_per_task,
+                seed,
+            ): task_root
+            for task_root in task_roots
+        }
+        for future in as_completed(futures):
+            task_root = futures[future]
+            try:
+                roots.extend(future.result())
+            except Exception as error:
+                errors.append({
+                    "dataset_root": str(task_root),
+                    "task_group": task_root.name,
+                    "stage": "list_task_datasets",
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                    "source_readonly": True,
+                })
 
     records: List[Dict[str, Any]] = []
-    errors: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(_inspect_root, root, source_root): root for root in roots
@@ -87,6 +122,7 @@ def discover_lerobot_roots(
                 errors.append({
                     "dataset_root": str(root),
                     "task_group": root.parent.name,
+                    "stage": "inspect_dataset_root",
                     "error_type": type(error).__name__,
                     "error": str(error),
                     "source_readonly": True,

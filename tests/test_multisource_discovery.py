@@ -41,6 +41,30 @@ class MultisourceDiscoveryTests(unittest.TestCase):
                 len((output / "dataset-list.txt").read_text().splitlines()), 4
             )
 
+    def test_ignores_non_directory_entries_in_task_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "source"
+            output = base / "output"
+            task = source / "pick"
+            task.mkdir(parents=True)
+            (task / "README.txt").write_text("not a dataset")
+            meta = task / "dataset" / "meta"
+            meta.mkdir(parents=True)
+            (meta / "info.json").write_text(json.dumps({
+                "total_episodes": 1,
+                "total_frames": 30,
+                "fps": 30.0,
+                "features": {"observation.images.ego": {}},
+            }))
+
+            summary = discover_lerobot_roots(
+                source, output, maximum_per_task=2, workers=2
+            )
+
+            self.assertEqual(summary["dataset_roots"], 1)
+            self.assertEqual(summary["errors"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
