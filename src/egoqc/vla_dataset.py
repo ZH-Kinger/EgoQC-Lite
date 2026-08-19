@@ -88,9 +88,17 @@ def _apply_synthetic_augmentation(
             result[index] = np.asarray(image)
     elif kind == "radial_distortion":
         strength = float(augmentation["strength"])
-        center_x = (width - 1) / 2.0
-        center_y = (height - 1) / 2.0
-        yy, xx = np.indices((height, width), dtype=np.float32)
+        content_mask = np.any(frames != 0, axis=(0, 3))
+        content_y, content_x = np.where(content_mask)
+        if not content_y.size or not content_x.size:
+            return result
+        y0, y1 = int(content_y.min()), int(content_y.max()) + 1
+        x0, x1 = int(content_x.min()), int(content_x.max()) + 1
+        content = frames[:, y0:y1, x0:x1]
+        content_height, content_width = content.shape[1:3]
+        center_x = (content_width - 1) / 2.0
+        center_y = (content_height - 1) / 2.0
+        yy, xx = np.indices((content_height, content_width), dtype=np.float32)
         normalized_x = (xx - center_x) / max(center_x, 1.0)
         normalized_y = (yy - center_y) / max(center_y, 1.0)
         radius_squared = normalized_x ** 2 + normalized_y ** 2
@@ -99,9 +107,9 @@ def _apply_synthetic_augmentation(
         source_y = np.rint(center_y + normalized_y * scale * max(center_y, 1.0)).astype(np.int32)
         # Edge extension avoids teaching a shortcut where added black borders,
         # rather than geometric warping, become the positive signal.
-        source_x = np.clip(source_x, 0, width - 1)
-        source_y = np.clip(source_y, 0, height - 1)
-        result = frames[:, source_y, source_x]
+        source_x = np.clip(source_x, 0, content_width - 1)
+        source_y = np.clip(source_y, 0, content_height - 1)
+        result[:, y0:y1, x0:x1] = content[:, source_y, source_x]
     else:
         raise ValueError(f"未知 synthetic_augmentation kind={kind}")
     return result
