@@ -176,6 +176,7 @@ class ClipSelectionTest(unittest.TestCase):
             self.assertEqual({row["source_dataset"] for row in queue}, {"supplier-batch-a"})
             self.assertEqual({row["supplier_id"] for row in queue}, {"vendor-a"})
             self.assertTrue(all(row["split_group_source"] == "raw_source_uri" for row in queue))
+            self.assertEqual(len({row["request_id"] for row in queue}), len(queue))
 
 
 if __name__ == "__main__":

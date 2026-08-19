@@ -285,6 +285,9 @@ def plan_qc_clips(
         end = start + minimum_frames
         left = bisect_left(event_frames, start)
         right = bisect_left(event_frames, end)
+        if right == left:
+            # A strict zero-event window was already emitted by add_controls.
+            return
         selected_frames = event_frames[left:right]
         selected_codes = sorted({
             str(event["code"])
@@ -318,7 +321,7 @@ def plan_qc_clips(
             if 0 <= frame_index < length:
                 by_frame[frame_index].append(event)
                 bad_frame_event_count += 1
-        occupied: List[Tuple[int, int]] = []
+        positive_windows: Dict[Tuple[int, int], Dict[str, Any]] = {}
         for cluster in _cluster_frames(
             list(by_frame),
             merge_gap_frames=merge_gap_frames,
@@ -343,7 +346,7 @@ def plan_qc_clips(
                     if task in model_tasks
                 }
             )
-            positive_sampler.add({
+            candidate = {
                 "episode_index": episode_index,
                 "start_frame": start,
                 "end_frame": end,
@@ -352,9 +355,24 @@ def plan_qc_clips(
                 "candidate_tasks": candidate_tasks,
                 "selection_source": "deterministic_bad_frame",
                 "priority": "high" if any(event.get("severity") == "error" for event in cluster_events) else "medium",
-            })
+            }
+            key = (start, end)
+            previous = positive_windows.get(key)
+            if previous is None:
+                positive_windows[key] = candidate
+            else:
+                previous["event_frames"] = sorted(set(previous["event_frames"] + cluster))
+                previous["event_codes"] = sorted(set(previous["event_codes"] + event_codes))
+                previous["candidate_tasks"] = sorted(
+                    set(previous["candidate_tasks"] + candidate_tasks)
+                )
+                if candidate["priority"] == "high":
+                    previous["priority"] = "high"
+        occupied: List[Tuple[int, int]] = []
+        for candidate in positive_windows.values():
+            positive_sampler.add(candidate)
             positive_count += 1
-            occupied.append((start, end))
+            occupied.append((candidate["start_frame"], candidate["end_frame"]))
         add_controls(episode_index, length, occupied)
         add_low_event_control(episode_index, length, by_frame)
 
