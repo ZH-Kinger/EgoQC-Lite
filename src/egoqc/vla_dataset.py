@@ -97,12 +97,11 @@ def _apply_synthetic_augmentation(
         scale = 1.0 + strength * radius_squared
         source_x = np.rint(center_x + normalized_x * scale * max(center_x, 1.0)).astype(np.int32)
         source_y = np.rint(center_y + normalized_y * scale * max(center_y, 1.0)).astype(np.int32)
-        valid = (
-            (source_x >= 0) & (source_x < width)
-            & (source_y >= 0) & (source_y < height)
-        )
-        result.fill(0)
-        result[:, valid] = frames[:, source_y[valid], source_x[valid]]
+        # Edge extension avoids teaching a shortcut where added black borders,
+        # rather than geometric warping, become the positive signal.
+        source_x = np.clip(source_x, 0, width - 1)
+        source_y = np.clip(source_y, 0, height - 1)
+        result = frames[:, source_y, source_x]
     else:
         raise ValueError(f"未知 synthetic_augmentation kind={kind}")
     return result
