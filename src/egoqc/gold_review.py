@@ -31,6 +31,37 @@ ISSUE_LABELS = {
 }
 
 
+ISSUE_DESCRIPTIONS = {
+    "instantaneous_velocity_outlier": (
+        "相邻帧手腕位移对应的速度超过本段自适应上限。重点区分真实快速动作与追踪瞬移。"
+    ),
+    "joint_rotation_jitter": (
+        "真实手形变化较平滑，但 MANO 手指关节角出现高频抖动。重点看指节抽动、穿模或局部翻转。"
+    ),
+    "position_jitter": (
+        "手腕三维轨迹存在高频残差。背景和真实手稳定而 mesh 来回跳动时，通常是标注问题。"
+    ),
+    "temporal_spike": (
+        "某一帧或少量连续帧明显偏离前后轨迹，随后立即返回，常见于追踪跳点。"
+    ),
+    "wrist_rotation_jitter": (
+        "手腕朝向在短时间内反复变化。重点确认 MANO 手掌是否突然翻转，而真实手并未同步翻转。"
+    ),
+    "camera_jitter": (
+        "相机位姿出现高频不稳定。重点看背景、双手和 MANO 是否一起产生不合理运动。"
+    ),
+    "mask_flicker": (
+        "手部有效标记在相邻帧间反复开关。重点看真实手仍可见时 mesh 是否突然消失。"
+    ),
+    "pose_freeze_candidate": (
+        "真实手仍在运动，但 MANO 手指姿态长时间不更新或整体平移，疑似追踪冻结。"
+    ),
+    "beta_drift": (
+        "同一 episode 内 MANO 手型参数发生变化，可能表现为 mesh 尺寸或手指比例缓慢漂移。"
+    ),
+}
+
+
 GOLD_LABELS = [
     {"code": "hand_absent", "label": "手离画超过标准"},
     {"code": "persistent_extra_hands", "label": "出现第二个人的手"},
@@ -205,6 +236,15 @@ def _issue_labels(codes: Iterable[str]) -> Dict[str, str]:
     return {str(code): ISSUE_LABELS.get(str(code), str(code)) for code in codes}
 
 
+def _issue_descriptions(codes: Iterable[str]) -> Dict[str, str]:
+    return {
+        str(code): ISSUE_DESCRIPTIONS.get(
+            str(code), "机器规则发现异常，请结合原视频和 MANO 叠加确认。"
+        )
+        for code in codes
+    }
+
+
 def build_phase_a_review_events(
     dataset: Path,
     baseline_evidence: Path,
@@ -278,8 +318,10 @@ def build_phase_a_review_events(
             "episode_index": episode_index,
             "task": task,
             "baseline_tier": baseline.get("tier"),
+            "fps": fps,
             "issue_codes": issue_codes,
             "issue_labels": _issue_labels(issue_codes),
+            "issue_descriptions": _issue_descriptions(issue_codes),
             "aggregate_issue_codes": aggregate_issue_codes,
             "rule_evidence": baseline.get("evidence") or {},
             "bad_frames": baseline.get("bad_frames") or [],

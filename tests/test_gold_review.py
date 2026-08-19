@@ -74,6 +74,9 @@ def test_phase_a_gold_review_materializes_exact_readonly_episode(tmp_path: Path)
     assert event["synthetic"] is False
     assert event["raw_source_readonly"] is True
     assert event["issue_codes"] == ["position_jitter", "temporal_spike"]
+    assert event["fps"] == 30.0
+    assert "高频残差" in event["issue_descriptions"]["position_jitter"]
+    assert "追踪跳点" in event["issue_descriptions"]["temporal_spike"]
     assert event["aggregate_issue_codes"] == ["bad_frame_ratio_exceeded"]
     assert event["mano_overlay_available"] is True
 

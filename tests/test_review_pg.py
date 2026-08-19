@@ -215,5 +215,8 @@ def test_gold_review_defaults_to_machine_assisted_confirmation():
     assert "保存修正" in REVIEW_HTML
     assert "workflow_version:'assisted-fast-v1'" in REVIEW_HTML
     assert "goldDetails(e,'confirm_machine','confirmed')" in REVIEW_HTML
+    assert "这个片段可能有什么问题" in REVIEW_HTML
+    assert "data-seek-frame" in REVIEW_HTML
+    assert "机器证据" in REVIEW_HTML
     assert "看到了什么（可多选）" not in REVIEW_HTML
     assert "首个坏点（秒，可空）" not in REVIEW_HTML
