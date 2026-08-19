@@ -7,7 +7,7 @@ import av
 import numpy as np
 
 from egoqc.adapters import detect_adapter, inspect_adapter
-from egoqc.canonical import CapabilityManifest, route_capabilities
+from egoqc.canonical import CapabilityManifest, plan_use_cases, route_capabilities
 from egoqc.generic_ego import build_generic_ego_views
 
 
@@ -35,6 +35,21 @@ class GenericEgoTests(unittest.TestCase):
         self.assertIn("MPJPE", route["unavailable_metrics"])
         self.assertFalse(route["missing_optional_modalities_are_failures"])
 
+    def test_use_case_planner_separates_pretraining_from_robot_imitation(self):
+        video_only = plan_use_cases(CapabilityManifest(video=True, video_timestamps=True))
+        self.assertEqual(video_only["video_self_supervised_pretraining"]["status"], "ready")
+        self.assertEqual(video_only["robot_imitation_learning"]["status"], "blocked")
+        robot = plan_use_cases(CapabilityManifest(
+            video=True,
+            video_timestamps=True,
+            independent_timestamps=True,
+            robot_action=True,
+            robot_state=True,
+            task_labels=True,
+            camera_intrinsics=True,
+        ))
+        self.assertEqual(robot["robot_imitation_learning"]["status"], "ready")
+
     def test_raw_video_adapter_uses_optional_sidecar_capabilities(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -52,6 +67,10 @@ class GenericEgoTests(unittest.TestCase):
             self.assertTrue(report["capabilities"]["camera_intrinsics"])
             self.assertTrue(report["capability_route"]["enabled_stages"]["task_semantic_qc"])
             self.assertFalse(report["capabilities"]["mano_parameters"])
+            self.assertEqual(
+                report["use_case_eligibility"]["video_language_pretraining"]["status"],
+                "ready",
+            )
 
     def test_builds_capability_aware_manifest_without_writing_source(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -85,6 +104,10 @@ class GenericEgoTests(unittest.TestCase):
             self.assertTrue(row["vla_pretraining"]["loss_masks"]["video_text_alignment"])
             self.assertFalse(row["vla_pretraining"]["loss_masks"]["mano_motion"])
             self.assertTrue(row["provenance"]["raw_immutable"])
+            self.assertEqual(
+                row["use_case_eligibility"]["robot_imitation_learning"]["status"],
+                "blocked",
+            )
             self.assertTrue((output / "generic-ego.parquet").is_file())
 
 

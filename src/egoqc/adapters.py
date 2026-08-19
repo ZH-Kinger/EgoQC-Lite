@@ -19,6 +19,8 @@ from .canonical import (
     CapabilityManifest,
     HandTrack,
     VideoReference,
+    plan_use_cases,
+    route_capabilities,
 )
 from .video import probe_video
 from .types import Issue
@@ -483,6 +485,7 @@ class RekaDailyRawAdapter:
         ]
 
     def summarize_index(self, dataset: Path) -> Dict[str, Any]:
+        capabilities = self.capabilities()
         table = pq.read_table(
             self._index_path(dataset),
             columns=[
@@ -514,7 +517,9 @@ class RekaDailyRawAdapter:
             },
             "metadata_candidate_ratio": float(pc.mean(expensive_stage_candidate).as_py()),
             "projects": self._project_counts(table["project"]),
-            "capabilities": self.capabilities().to_dict(),
+            "capabilities": capabilities.to_dict(),
+            "capability_route": route_capabilities(capabilities),
+            "use_case_eligibility": plan_use_cases(capabilities),
             "unavailable_acceptance_metrics": self.unavailable_metrics(),
         }
 
@@ -599,6 +604,8 @@ class RekaDailyRawAdapter:
             "video_id": video_id,
             "metadata": row,
             "capabilities": self.capabilities().to_dict(),
+            "capability_route": route_capabilities(self.capabilities()),
+            "use_case_eligibility": plan_use_cases(self.capabilities()),
             "video_path": str(video_path) if video_path else None,
             "video_uri": source_uri,
             "source_access": (
@@ -709,26 +716,33 @@ def inspect_adapter(
             "detected_adapter": "egodex_hdf5",
             "compatible": True,
             "canonical": canonical.summary(),
+            "capability_route": route_capabilities(canonical.capabilities),
+            "use_case_eligibility": plan_use_cases(canonical.capabilities),
         }
     if adapter_name != "mano_hamer":
+        capabilities = (
+            CapabilityManifest(
+                video=True,
+                camera_intrinsics=True,
+                camera_trajectory=True,
+                mano_parameters=True,
+                task_labels=True,
+                independent_timestamps=True,
+                video_timestamps=True,
+            )
+            if adapter_name == "standard_v3" else CapabilityManifest()
+        )
         return {
             "dataset": str(dataset.expanduser().resolve()),
             "detected_adapter": adapter_name,
             "compatible": adapter_name == "standard_v3",
-            "capabilities": (
-                CapabilityManifest(
-                    video=True,
-                    camera_intrinsics=True,
-                    camera_trajectory=True,
-                    mano_parameters=True,
-                    task_labels=True,
-                    independent_timestamps=True,
-                ).to_dict()
-                if adapter_name == "standard_v3" else {}
-            ),
+            "capabilities": capabilities.to_dict(),
+            "capability_route": route_capabilities(capabilities),
+            "use_case_eligibility": plan_use_cases(capabilities),
         }
     numeric_episode = int(episode)
     adapted = ManoHamerAdapter().load_episode(dataset, numeric_episode)
+    capabilities = ManoHamerAdapter.capabilities()
     first = adapted.records[0].to_dict() if adapted.records else {}
     return {
         "dataset": str(dataset.expanduser().resolve()),
@@ -745,5 +759,7 @@ def inspect_adapter(
             "extrinsics_w2c": len(first.get("extrinsics_w2c", [])),
         },
         "provenance": adapted.provenance,
-        "capabilities": ManoHamerAdapter.capabilities().to_dict(),
+        "capabilities": capabilities.to_dict(),
+        "capability_route": route_capabilities(capabilities),
+        "use_case_eligibility": plan_use_cases(capabilities),
     }

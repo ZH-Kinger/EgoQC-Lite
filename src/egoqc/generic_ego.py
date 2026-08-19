@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .canonical import CapabilityManifest, route_capabilities
+from .canonical import CapabilityManifest, plan_use_cases, route_capabilities
 from .provenance import code_version
 from .report import write_json
 from .video import probe_video
@@ -43,6 +43,7 @@ PARQUET_SCHEMA = pa.schema([
     ("split_group", pa.string()),
     ("capabilities_json", pa.string()),
     ("capability_route_json", pa.string()),
+    ("use_case_eligibility_json", pa.string()),
     ("allowed_objectives_json", pa.string()),
     ("blocked_objectives_json", pa.string()),
     ("issues_json", pa.string()),
@@ -138,6 +139,33 @@ def _capabilities(sidecar: Dict[str, Any], probe: Dict[str, Any]) -> CapabilityM
         "tactile": _nonempty(sidecar.get("tactile")),
         "depth": any(_nonempty(sidecar.get(name)) for name in ("depth", "depth_path")),
         "imu": any(_nonempty(sidecar.get(name)) for name in ("imu", "imu_path")),
+        "multiple_cameras": any(
+            _nonempty(sidecar.get(name))
+            for name in ("camera_views", "secondary_cameras", "multi_camera_videos")
+        ),
+        "stereo": bool(sidecar.get("stereo", False)) or _nonempty(sidecar.get("stereo_pair")),
+        "camera_extrinsics": any(
+            _nonempty(sidecar.get(name))
+            for name in ("camera_extrinsics", "rig_extrinsics", "multi_camera_extrinsics")
+        ),
+        "gaze": any(_nonempty(sidecar.get(name)) for name in ("gaze", "gaze_path")),
+        "robot_state": any(
+            _nonempty(sidecar.get(name)) for name in ("robot_state", "robot_state_path")
+        ),
+        "robot_action": any(
+            _nonempty(sidecar.get(name)) for name in ("robot_action", "actions", "action_path")
+        ),
+        "glove_pose": any(
+            _nonempty(sidecar.get(name)) for name in ("glove_pose", "glove_path")
+        ),
+        "privacy_annotations": any(
+            _nonempty(sidecar.get(name))
+            for name in ("privacy_annotations", "privacy_review", "redaction_manifest")
+        ),
+        "object_annotations": any(
+            _nonempty(sidecar.get(name))
+            for name in ("objects", "object_annotations", "object_tracks")
+        ),
         "independent_timestamps": any(
             _nonempty(sidecar.get(name)) for name in ("sensor_timestamps", "timestamps")
         ),
@@ -183,6 +211,7 @@ def inspect_generic_ego_video(
         "sidecar_metadata": metadata,
         "capabilities": capabilities.to_dict(),
         "capability_route": route,
+        "use_case_eligibility": plan_use_cases(capabilities),
         "issues": issue_rows,
     }
 
@@ -302,6 +331,7 @@ def _record(
         "source_metadata": sidecar,
         "capabilities": capabilities.to_dict(),
         "capability_route": inspection["capability_route"],
+        "use_case_eligibility": plan_use_cases(capabilities),
         "issues": inspection["issues"],
         "vla_pretraining": _training_contract(
             capabilities,
@@ -345,6 +375,9 @@ def _parquet_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "split_group": row["vla_pretraining"]["split_group"],
             "capabilities_json": json.dumps(row["capabilities"], ensure_ascii=False),
             "capability_route_json": json.dumps(row["capability_route"], ensure_ascii=False),
+            "use_case_eligibility_json": json.dumps(
+                row["use_case_eligibility"], ensure_ascii=False
+            ),
             "allowed_objectives_json": json.dumps(
                 row["vla_pretraining"]["allowed_objectives"], ensure_ascii=False
             ),
@@ -422,6 +455,7 @@ def build_generic_ego_views(
     technical_candidates = 0
     capability_counts: Counter = Counter()
     objective_counts: Counter = Counter()
+    use_case_counts: Counter = Counter()
     parquet_buffer: List[Dict[str, Any]] = []
     parquet_writer = pq.ParquetWriter(parquet_temp, PARQUET_SCHEMA, compression="zstd")
 
@@ -462,6 +496,10 @@ def build_generic_ego_views(
                     name for name, value in row["capabilities"].items() if value
                 )
                 objective_counts.update(row["vla_pretraining"]["allowed_objectives"])
+                use_case_counts.update(
+                    f"{name}:{value['status']}"
+                    for name, value in row["use_case_eligibility"].items()
+                )
                 json_handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
                 parquet_buffer.extend(_parquet_rows([row]))
                 if len(parquet_buffer) >= 4096:
@@ -493,6 +531,7 @@ def build_generic_ego_views(
         },
         "capability_counts": dict(capability_counts),
         "training_objective_counts": dict(objective_counts),
+        "use_case_status_counts": dict(use_case_counts),
         "missing_optional_modalities_are_failures": False,
         "artifacts": {
             "jsonl": str(output / "generic-ego.jsonl"),

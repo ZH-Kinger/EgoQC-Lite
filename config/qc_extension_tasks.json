@@ -1,0 +1,52 @@
+{
+  "schema_version": "egoqc-optional-extension-tasks-v1",
+  "policy": {
+    "core_acceptance_unchanged": true,
+    "tasks_require_separate_gold_and_calibration": true,
+    "uncalibrated_extensions_may_only_route_to_review": true
+  },
+  "visual_extensions": {
+    "non_ego_viewpoint": {
+      "description": "视频不是稳定的第一人称或头胸戴视角",
+      "required_capabilities": ["video"]
+    },
+    "camera_mount_failure": {
+      "description": "相机脱落、被衣物遮住、朝向失效或长时间拍摄无关区域",
+      "required_capabilities": ["video"]
+    },
+    "privacy_exposure": {
+      "description": "出现可识别人脸、屏幕、证件、地址或敏感音频",
+      "required_capabilities": ["video"]
+    },
+    "edited_or_discontinuous_video": {
+      "description": "存在切镜、拼接、回放或不自然的时间跳跃",
+      "required_capabilities": ["video"]
+    },
+    "duplicate_or_replayed_episode": {
+      "description": "与历史数据近重复、重复采集或回放",
+      "required_capabilities": ["video"]
+    },
+    "no_meaningful_hand_interaction": {
+      "description": "虽有手出现但没有可供操作学习的有效手物交互",
+      "required_capabilities": ["video"]
+    }
+  },
+  "sensor_extensions": {
+    "multi_camera_desync": {
+      "description": "多相机时间不同步",
+      "required_capabilities": ["multiple_cameras", "independent_timestamps"]
+    },
+    "robot_action_desync": {
+      "description": "机器人 action/state 与视频时间错位",
+      "required_capabilities": ["robot_action", "independent_timestamps"]
+    },
+    "glove_signal_dropout": {
+      "description": "遥操作手套姿态或触觉信号丢失、饱和或冻结",
+      "required_capabilities": ["glove_pose", "independent_timestamps"]
+    },
+    "imu_camera_inconsistency": {
+      "description": "IMU 与视觉运动趋势不一致",
+      "required_capabilities": ["imu", "video", "independent_timestamps"]
+    }
+  }
+}

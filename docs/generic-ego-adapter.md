@@ -54,6 +54,19 @@ egoqc inspect-adapter /path/to/episode-001.mp4 --video-check header
 
 输出 `capabilities`、`capability_route`、当前可运行阶段、不可用指标和安全补齐候选。
 
+同时输出 `use_case_eligibility`，对以下用途分别给出 `ready/partial/blocked`：
+
+- 视频自监督、视频文本和视觉 QC 训练；
+- 手部重建推理与有监督训练；
+- VLA observation 预训练和机器人模仿学习；
+- 多相机、双目深度、眼动、VSLAM；
+- 遥操作手套与触觉学习；
+- 供应商验收和隐私审查后的公开发布。
+
+扩展质检任务还包括非 ego 视角、相机佩戴失效、隐私暴露、视频剪辑/回放、近重复 episode、
+无有效手物交互、多相机不同步、机器人 action 不同步、手套掉信号和 IMU/视觉不一致。它们定义在
+`config/qc_extension_tasks.json`，在拥有独立 Gold 和校准前只允许进入人工复检，不能自动拒收。
+
 ## 批量生成只读 manifest
 
 ```bash

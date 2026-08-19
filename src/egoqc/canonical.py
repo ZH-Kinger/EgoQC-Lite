@@ -31,6 +31,15 @@ class CapabilityManifest:
     depth: bool = False
     imu: bool = False
     audio: bool = False
+    multiple_cameras: bool = False
+    stereo: bool = False
+    camera_extrinsics: bool = False
+    gaze: bool = False
+    robot_state: bool = False
+    robot_action: bool = False
+    glove_pose: bool = False
+    privacy_annotations: bool = False
+    object_annotations: bool = False
 
     def to_dict(self) -> Dict[str, bool]:
         return {
@@ -71,6 +80,16 @@ def route_capabilities(
         "hand_joint_qc": capabilities.hand_joint_transforms,
         "tactile_qc": capabilities.tactile,
         "sensor_sync_qc": capabilities.independent_timestamps,
+        "depth_qc": capabilities.depth,
+        "imu_qc": capabilities.imu,
+        "audio_qc": capabilities.audio,
+        "gaze_qc": capabilities.gaze,
+        "multiview_sync_qc": capabilities.multiple_cameras,
+        "robot_action_sync_qc": capabilities.robot_action,
+        "glove_sync_qc": capabilities.glove_pose,
+        "privacy_visual_screening": capabilities.video,
+        "ego_viewpoint_screening": capabilities.video,
+        "near_duplicate_detection": capabilities.video,
     }
     objectives = {
         "video_representation": capabilities.video,
@@ -86,6 +105,10 @@ def route_capabilities(
         "mano_motion": capabilities.mano_parameters,
         "camera_pose": capabilities.camera_trajectory,
         "tactile": capabilities.tactile,
+        "robot_action": capabilities.robot_action,
+        "robot_state": capabilities.robot_state,
+        "multiview_consistency": capabilities.multiple_cameras,
+        "gaze_conditioning": capabilities.gaze,
     }
     metric_requirements = {
         "MPJPE": capabilities.hand_ground_truth and (
@@ -98,6 +121,13 @@ def route_capabilities(
         "sensor_drift_Et": capabilities.independent_timestamps,
         "task_label_match": enabled["task_semantic_qc"],
         "subtask_boundary": enabled["subtask_boundary_qc"],
+        "multiview_calibration": capabilities.multiple_cameras
+        and capabilities.camera_intrinsics
+        and capabilities.camera_extrinsics,
+        "robot_action_sync": capabilities.robot_action
+        and capabilities.independent_timestamps,
+        "glove_video_sync": capabilities.glove_pose
+        and capabilities.independent_timestamps,
     }
     completion = []
     if capabilities.video and not capabilities.video_timestamps:
@@ -138,6 +168,92 @@ def route_capabilities(
         "completion_candidates": completion,
         "missing_optional_modalities_are_failures": False,
     }
+
+
+def plan_use_cases(capabilities: CapabilityManifest) -> Dict[str, Any]:
+    """Describe what a partially observed ego source can safely be used for."""
+
+    values = capabilities.to_dict()
+    values["text_labels"] = bool(
+        capabilities.task_labels or capabilities.coarse_activity_labels
+    )
+    definitions = {
+        "video_self_supervised_pretraining": {
+            "required": ("video",),
+            "recommended": ("video_timestamps",),
+        },
+        "video_language_pretraining": {
+            "required": ("video", "text_labels"),
+            "recommended": ("task_labels",),
+        },
+        "visual_qc_model_training": {
+            "required": ("video",),
+            "recommended": ("task_labels", "hand_bounding_boxes", "video_timestamps"),
+        },
+        "hand_reconstruction_inference": {
+            "required": ("video",),
+            "recommended": ("camera_intrinsics", "camera_distortion"),
+        },
+        "hand_reconstruction_supervised_training": {
+            "required": ("video", "hand_ground_truth"),
+            "recommended": ("camera_intrinsics", "mano_parameters", "independent_timestamps"),
+        },
+        "vla_observation_pretraining": {
+            "required": ("video", "task_labels"),
+            "recommended": ("hand_2d_keypoints", "camera_intrinsics", "subtask_labels"),
+        },
+        "robot_imitation_learning": {
+            "required": ("video", "robot_action", "independent_timestamps"),
+            "recommended": ("robot_state", "task_labels", "camera_intrinsics"),
+        },
+        "multiview_representation_learning": {
+            "required": ("video", "multiple_cameras"),
+            "recommended": ("camera_intrinsics", "camera_extrinsics", "independent_timestamps"),
+        },
+        "stereo_depth_learning": {
+            "required": ("video", "stereo", "camera_intrinsics", "camera_extrinsics"),
+            "recommended": ("depth", "independent_timestamps"),
+        },
+        "teleoperation_glove_learning": {
+            "required": ("video", "glove_pose", "independent_timestamps"),
+            "recommended": ("tactile", "task_labels", "robot_action"),
+        },
+        "gaze_conditioned_interaction": {
+            "required": ("video", "gaze", "independent_timestamps"),
+            "recommended": ("task_labels", "hand_2d_keypoints"),
+        },
+        "camera_motion_or_slam_learning": {
+            "required": ("video", "camera_trajectory"),
+            "recommended": ("camera_intrinsics", "imu", "trajectory_ground_truth"),
+        },
+        "public_release_after_privacy_review": {
+            "required": ("video", "privacy_annotations"),
+            "recommended": (),
+        },
+        "supplier_acceptance": {
+            "required": ("video",),
+            "recommended": (
+                "task_labels", "camera_intrinsics", "camera_trajectory",
+                "mano_parameters", "independent_timestamps",
+            ),
+        },
+    }
+    result = {}
+    for name, definition in definitions.items():
+        missing_required = [key for key in definition["required"] if not values.get(key, False)]
+        missing_recommended = [
+            key for key in definition["recommended"] if not values.get(key, False)
+        ]
+        status = "blocked" if missing_required else "partial" if missing_recommended else "ready"
+        result[name] = {
+            "status": status,
+            "missing_required": missing_required,
+            "missing_recommended": missing_recommended,
+            "ground_truth_policy": (
+                "predicted_silver_modalities_may_train_auxiliary_heads_but_may_not_score_accuracy"
+            ),
+        }
+    return result
 
 
 @dataclass
