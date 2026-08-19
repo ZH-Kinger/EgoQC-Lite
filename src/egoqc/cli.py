@@ -44,6 +44,7 @@ from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .teacher_queue import merge_teacher_queues
+from .queue_gold import build_queue_gold_review
 from .teacher_training_pool import build_teacher_training_pool
 from .synthetic_qc import build_synthetic_qc_training
 from .interventions import plan_qc_interventions, run_qc_interventions
@@ -391,6 +392,16 @@ def main() -> None:
     queue_merge.add_argument("--output", type=Path, required=True)
     queue_merge.add_argument("--maximum-requests", type=int)
     queue_merge.add_argument("--seed", type=int, default=17)
+    queue_gold = sub.add_parser(
+        "build-queue-gold-review",
+        help="从多源教师候选分层生成 4–8 秒人工 Gold 复检任务",
+    )
+    queue_gold.add_argument("--queue", type=Path, required=True)
+    queue_gold.add_argument("--output", type=Path, required=True)
+    queue_gold.add_argument("--maximum-events", type=int, default=180)
+    queue_gold.add_argument("--seed", type=int, default=23)
+    queue_gold.add_argument("--materialize-media", action="store_true")
+    queue_gold.add_argument("--workers", type=int, default=8)
     adapter_clip_plan = sub.add_parser(
         "plan-adapter-clips",
         help="从 EgoDex 等只读 adapter 样本生成低成本视觉教师队列",
@@ -1016,6 +1027,16 @@ def main() -> None:
             args.output,
             maximum_requests=args.maximum_requests,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-queue-gold-review":
+        summary = build_queue_gold_review(
+            args.queue,
+            args.output,
+            maximum_events=args.maximum_events,
+            seed=args.seed,
+            materialize_media=args.materialize_media,
+            workers=args.workers,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-adapter-clips":
