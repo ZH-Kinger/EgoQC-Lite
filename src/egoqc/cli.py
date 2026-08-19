@@ -38,6 +38,7 @@ from .distillation import (
     evaluate_qc_predictions,
     smoke_train_qc_student,
 )
+from .research_evaluation import evaluate_qc_research_protocol
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
@@ -274,6 +275,27 @@ def main() -> None:
     distill_eval.add_argument("--gold-labels", type=Path, required=True)
     distill_eval.add_argument("--task-config", type=Path, default=Path("config/visual_model_tasks.json"))
     distill_eval.add_argument("--output", type=Path, required=True)
+    research_eval = sub.add_parser(
+        "evaluate-qc-research",
+        help="按论文协议在 validation 冻结阈值，并在隔离 test 上报告置信区间和 worst-group",
+    )
+    research_eval.add_argument("--validation-predictions", type=Path, required=True)
+    research_eval.add_argument("--validation-gold", type=Path, required=True)
+    research_eval.add_argument("--test-predictions", type=Path, required=True)
+    research_eval.add_argument("--test-gold", type=Path, required=True)
+    research_eval.add_argument(
+        "--task-config", type=Path, default=Path("config/visual_model_tasks.json")
+    )
+    research_eval.add_argument("--output", type=Path, required=True)
+    research_eval.add_argument(
+        "--group-field",
+        action="append",
+        dest="group_fields",
+        help="重复传入以指定切片字段；默认 supplier_id/camera_id/source_dataset",
+    )
+    research_eval.add_argument("--bootstrap-replicates", type=int, default=1000)
+    research_eval.add_argument("--minimum-group-samples", type=int, default=30)
+    research_eval.add_argument("--seed", type=int, default=20260819)
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -795,6 +817,21 @@ def main() -> None:
             args.gold_labels,
             args.task_config,
             args.output,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "evaluate-qc-research":
+        summary = evaluate_qc_research_protocol(
+            args.validation_predictions,
+            args.validation_gold,
+            args.test_predictions,
+            args.test_gold,
+            args.task_config,
+            args.output,
+            group_fields=args.group_fields
+            or ("supplier_id", "camera_id", "source_dataset"),
+            bootstrap_replicates=args.bootstrap_replicates,
+            minimum_group_samples=args.minimum_group_samples,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":

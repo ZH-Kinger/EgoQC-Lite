@@ -14,6 +14,11 @@ QC 小模型需要的 clip-level Gold Set、教师软标签、数据量、切分
 99% precision 置信度口径见 `docs/qc-training-data-contract.md`。生产训练前先运行
 `egoqc audit-qc-training`；未通过 readiness 不开启自动拒收。
 
+论文级评测必须使用独立 validation/test：validation 只冻结阈值，test 不重新调参，并报告
+person/session 聚类置信区间和供应商 worst-group。协议见
+[`docs/ieee-experiment-protocol.md`](docs/ieee-experiment-protocol.md)，命令为
+`egoqc evaluate-qc-research`。
+
 自动候选 clip 选择与开放世界教师审查见 `docs/qc-auto-clip-selection.md`；各层训练数据的
 起步量、用途和隔离要求见 `docs/qc-model-data-plan.md`。视觉教师只读取规则召回的 4–8 秒
 片段和少量未标注随机对照，不扫描全量视频。

@@ -1,0 +1,76 @@
+{
+  "schema_version": "egoqc-ieee-experiment-plan-v1",
+  "study_title": "Scalable Selective Quality Assessment for Egocentric Embodied-AI Video",
+  "hypotheses": {
+    "h1": "Domain-adaptive self-supervised video pretraining improves recall at fixed 99% precision.",
+    "h2": "Global video, hand ROI, and kinematic fusion improves worst-group performance over RGB-only models.",
+    "h3": "A multi-expert teacher distilled into a temporal student preserves quality while increasing video-hours per GPU-hour.",
+    "h4": "Selective prediction provides higher reliable automation coverage than forced binary classification."
+  },
+  "data_protocol": {
+    "unit": "reviewed_clip",
+    "split_precedence": ["supplier_id", "person_id", "operator_id", "collection_session_id"],
+    "validation_role": "threshold_selection_and_calibration_only",
+    "test_role": "locked_single_evaluation",
+    "evaluation_truth": "human_gold_only",
+    "synthetic_data_allowed_splits": ["train"],
+    "weak_teacher_data_allowed_splits": ["train"],
+    "required_external_test": "unseen_supplier_or_camera",
+    "seeds": [17, 31, 47]
+  },
+  "primary_endpoint": {
+    "name": "recall_at_statistically_supported_precision",
+    "precision_target": 0.99,
+    "support_rule": "two_sided_95_percent_wilson_lower_bound",
+    "selection_split": "validation",
+    "report_split": "test"
+  },
+  "secondary_endpoints": [
+    "average_precision",
+    "auroc",
+    "f1",
+    "brier_score",
+    "ece_15_bin",
+    "auto_reject_coverage",
+    "worst_supplier_precision",
+    "worst_supplier_recall",
+    "video_hours_per_gpu_hour"
+  ],
+  "teacher_system": {
+    "motion_encoder": "vjepa2_or_vjepa2_1_when_released_and_reproducible",
+    "semantic_encoder": "internvideo2",
+    "visual_language_judge": "version_pinned_external_or_local_vlm",
+    "hand_roi_expert": "high_resolution_hand_visual_encoder",
+    "kinematic_expert": "mano_slam_temporal_transformer",
+    "fusion": "task_specific_out_of_fold_stacking"
+  },
+  "student_system": {
+    "global_stream": {"frames": 16, "resolution": 224},
+    "hand_roi_stream": {"frames": 32, "resolution": 224},
+    "kinematic_stream": "masked_numeric_temporal_encoder",
+    "objective": "weighted_asymmetric_multilabel_plus_logit_feature_temporal_distillation",
+    "outputs": ["per_task_probability", "uncertainty", "abstain", "temporal_evidence"]
+  },
+  "experiments": [
+    {"id": "E0", "name": "deterministic_rules", "purpose": "non_learned_baseline"},
+    {"id": "E1", "name": "rgb_global_videomaev2", "purpose": "reproducible_video_baseline"},
+    {"id": "E2", "name": "rgb_multiscale_temporal", "purpose": "temporal_scale_ablation"},
+    {"id": "E3", "name": "rgb_plus_hand_roi", "purpose": "fine_hand_evidence_ablation"},
+    {"id": "E4", "name": "rgb_roi_plus_kinematics", "purpose": "multimodal_fusion_ablation"},
+    {"id": "E5", "name": "domain_adaptive_pretraining", "purpose": "unlabeled_ego_data_ablation"},
+    {"id": "E6", "name": "multi_expert_teacher_ensemble", "purpose": "accuracy_upper_bound"},
+    {"id": "E7", "name": "distilled_student", "purpose": "accuracy_throughput_pareto"},
+    {"id": "E8", "name": "distilled_student_selective", "purpose": "final_production_system"}
+  ],
+  "reporting": {
+    "repeat_runs": 3,
+    "report_mean_and_standard_deviation": true,
+    "cluster_bootstrap_group": "person_or_session",
+    "cluster_bootstrap_replicates": 1000,
+    "report_per_task": true,
+    "report_per_supplier": true,
+    "report_failure_examples": true,
+    "report_training_and_inference_compute": true,
+    "report_dataset_and_code_fingerprints": true
+  }
+}

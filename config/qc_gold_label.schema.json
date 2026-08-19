@@ -51,7 +51,13 @@
         "severe_occlusion": {"type": "boolean"},
         "mano_overlay_drift": {"type": "boolean"},
         "task_label_mismatch": {"type": "boolean"},
-        "subtask_boundary_error": {"type": "boolean"}
+        "subtask_boundary_error": {"type": "boolean"},
+        "unusable_visual_quality": {"type": "boolean"},
+        "action_not_observable": {"type": "boolean"},
+        "interaction_incomplete": {"type": "boolean"},
+        "frozen_or_duplicate_frames": {"type": "boolean"},
+        "severe_lens_artifact": {"type": "boolean"},
+        "scene_task_out_of_scope": {"type": "boolean"}
       }
     },
     "note": {"type": "string"}

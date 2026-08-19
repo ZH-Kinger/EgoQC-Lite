@@ -12,7 +12,7 @@ MANO overlay 漂移、任务文本错配和子任务边界等视觉语义。
 - 唯一 `video_id`，以及 `clip_start_s/clip_end_s`；
 - supplier、person/operator、collection session、scene、camera、task 标识；
 - 4–8 秒 RGB clip，建议训练解码 8 FPS，保留原视频用于复核；
-- 七项多标签布尔 Gold label，允许只标本次明确判断的任务；
+- 十三项多标签布尔 Gold label，允许只标本次明确判断的任务；
 - reviewer、审核时间、标签规范版本；争议样本保存第二审核人和仲裁人；
 - 可选 MANO mesh/skeleton overlay。`mano_overlay_drift` 没有 overlay 时必须缺失，不能填负例。
 
@@ -59,7 +59,7 @@ clip 记录，仍不修改 raw。
 | 阈值选择 | validation 每类 ≥100 Gold 正例 + ≥300 Gold 负例 | 选阈值、做概率校准 |
 | 最终盲测 | test 每类 ≥200 Gold 正例 + ≥1000 Gold 负例 | 未参与训练和调参，报告 95% 置信区间 |
 
-七项是多标签，样本可同时覆盖多类，不能简单把各行数量相加。稀有错误应由规则候选、教师
+十三项是多标签，样本可同时覆盖多类，不能简单把各行数量相加。稀有错误应由规则候选、教师
 高分样本和供应商失败案例主动挖掘；负例要包含“看起来相似但实际合格”的 hard negatives。
 
 ## 3. 划分和防泄漏
