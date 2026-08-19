@@ -97,6 +97,13 @@ def main() -> None:
     )
     extract.add_argument("--mano-alpha", type=float, default=0.48)
     extract.add_argument(
+        "--no-seek",
+        action="store_true",
+        help="禁用 PTS 关键帧 seek，始终从聚合视频开头顺序解码",
+    )
+    extract.add_argument("--seek-margin-s", type=float, default=2.0)
+    extract.add_argument("--seek-min-frame", type=int, default=300)
+    extract.add_argument(
         "--annotated-root", type=Path,
         help="可选 repaired annotated MP4 目录，用于复检页的 MANO 参考标签页",
     )
@@ -666,6 +673,9 @@ def main() -> None:
             args.video_key,
             mano_renderer=mano_renderer,
             annotated_root=args.annotated_root.expanduser() if args.annotated_root else None,
+            seek=not args.no_seek,
+            seek_margin_s=args.seek_margin_s,
+            seek_min_frame=args.seek_min_frame,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "render-annotated-video":

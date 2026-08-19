@@ -110,6 +110,8 @@ egoqc extract-samples /mnt/data/readonly/lerobot-v3 \
 
 输出包含 contact sheet、`review.html` 和 `episodes-vlc.xspf`。这里展示的是原始 episode，
 用于判断 baseline 的规则报警是否真实；干预区间和 evidence delta 仍通过 JSONL 对齐。
+聚合 MP4 默认按 PTS 回退到目标帧前的关键帧再解码，并在 summary 中报告 seek 成功率、
+回退次数、实际解码帧数和缺失帧；只有排查时间轴问题时才使用 `--no-seek` 做顺序解码对照。
 
 ## Phase A 的真实停止条件
 

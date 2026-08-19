@@ -36,6 +36,91 @@ def _fps(info: Dict[str, Any], video_key: str) -> float:
     return float(info["features"][video_key]["info"]["video.fps"])
 
 
+def _decode_requested_frames(
+    video_path: Path,
+    requested_indices: List[int],
+    fps: float,
+    *,
+    seek: bool = True,
+    seek_margin_s: float = 2.0,
+    seek_min_frame: int = 300,
+) -> Tuple[Dict[int, Image.Image], Dict[str, Any]]:
+    """Decode sparse absolute frame indices, seeking by PTS when it is safe.
+
+    Frame-index equality remains the correctness criterion. If PTS-based seek
+    cannot recover every requested frame, only the missing frames are retried
+    with the previous sequential decoder.
+    """
+
+    requested = sorted({int(value) for value in requested_indices if int(value) >= 0})
+    pending = set(requested)
+    images: Dict[int, Image.Image] = {}
+    statistics: Dict[str, Any] = {
+        "seek_attempted": False,
+        "seek_succeeded": False,
+        "sequential_fallback": False,
+        "decoded_frames": 0,
+    }
+    if not requested:
+        return images, statistics
+
+    if seek and requested[0] >= max(0, int(seek_min_frame)):
+        try:
+            with av.open(str(video_path)) as container:
+                stream = container.streams.video[0]
+                if stream.time_base is None:
+                    raise ValueError("video stream 缺少 time_base")
+                statistics["seek_attempted"] = True
+                margin_frames = max(1, int(round(max(0.0, seek_margin_s) * fps)))
+                seek_frame = max(0, requested[0] - margin_frames)
+                start_pts = int(stream.start_time or 0)
+                seek_pts = start_pts + int(
+                    round((seek_frame / fps) / float(stream.time_base))
+                )
+                container.seek(
+                    max(0, seek_pts),
+                    stream=stream,
+                    backward=True,
+                    any_frame=False,
+                )
+                stop_after = requested[-1] + max(2, int(math.ceil(fps * 0.25)))
+                for frame in container.decode(stream):
+                    statistics["decoded_frames"] += 1
+                    if frame.pts is None:
+                        continue
+                    timestamp_s = float(
+                        (int(frame.pts) - start_pts) * stream.time_base
+                    )
+                    decoded_index = int(round(timestamp_s * fps))
+                    if decoded_index in pending:
+                        images[decoded_index] = frame.to_image()
+                        pending.remove(decoded_index)
+                        if not pending:
+                            break
+                    if decoded_index > stop_after:
+                        break
+                statistics["seek_succeeded"] = not pending
+        except (OSError, ValueError, av.FFmpegError):
+            # Exact output is more important than seek performance. The
+            # sequential pass below remains the source of truth.
+            pass
+
+    if pending:
+        statistics["sequential_fallback"] = True
+        with av.open(str(video_path)) as container:
+            stream = container.streams.video[0]
+            for decoded_index, frame in enumerate(container.decode(stream)):
+                statistics["decoded_frames"] += 1
+                if decoded_index in pending:
+                    images[decoded_index] = frame.to_image()
+                    pending.remove(decoded_index)
+                    if not pending:
+                        break
+
+    statistics["missing_frames"] = sorted(pending)
+    return images, statistics
+
+
 def _load_mano_records(
     dataset: Path,
     episode_rows: List[Dict[str, Any]],
@@ -246,6 +331,9 @@ def extract_samples(
     jpeg_quality: int = 88,
     mano_renderer: Optional[ManoOverlayRenderer] = None,
     annotated_root: Optional[Path] = None,
+    seek: bool = True,
+    seek_margin_s: float = 2.0,
+    seek_min_frame: int = 300,
 ) -> Dict[str, Any]:
     dataset = dataset.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -277,57 +365,61 @@ def extract_samples(
     manifest = []
     contact_frames: Dict[int, List[tuple[int, Path]]] = defaultdict(list)
     overlay_failures = 0
+    decode_statistics: List[Dict[str, Any]] = []
     for video_path, targets in grouped.items():
         if not video_path.exists():
             continue
-        pending = set(targets)
-        with av.open(str(video_path)) as container:
-            stream = container.streams.video[0]
-            for decoded_index, frame in enumerate(container.decode(stream)):
-                if decoded_index not in pending:
-                    continue
-                image = frame.to_image()
-                for ep, local_index in targets[decoded_index]:
-                    ep_dir = output / f"episode-{ep:06d}"
-                    ep_dir.mkdir(exist_ok=True)
-                    path = ep_dir / f"frame-{local_index:06d}.jpg"
-                    image.save(path, quality=jpeg_quality, optimize=True)
-                    display_path = path
-                    evidence: Dict[str, Any] = {
-                        "episode_index": ep,
-                        "frame_index": local_index,
-                        "absolute_video_frame": decoded_index,
-                        "source_video": str(video_path.relative_to(dataset)),
-                        "image": str(path),
-                        "mano_status": "disabled",
-                    }
-                    if mano_renderer:
-                        try:
-                            record = mano_records[(ep, local_index)]
-                            overlay, metrics = mano_renderer.render(image, record)
-                            overlay_path = ep_dir / f"frame-{local_index:06d}-mano.jpg"
-                            overlay.save(overlay_path, quality=jpeg_quality, optimize=True)
-                            display_path = overlay_path
-                            evidence.update(
-                                {
-                                    "mano_status": "rendered",
-                                    "overlay_image": str(overlay_path),
-                                    "mano_metrics": metrics,
-                                }
-                            )
-                        except Exception as error:  # visual evidence must not stop QC
-                            overlay_failures += 1
-                            evidence.update(
-                                {
-                                    "mano_status": "failed",
-                                    "mano_error": f"{type(error).__name__}: {error}",
-                                }
-                            )
-                    contact_frames[ep].append((local_index, display_path))
-                    manifest.append(evidence)
-                pending.remove(decoded_index)
-                if not pending:
-                    break
+        decoded, decoder_stats = _decode_requested_frames(
+            video_path,
+            list(targets),
+            fps,
+            seek=seek,
+            seek_margin_s=seek_margin_s,
+            seek_min_frame=seek_min_frame,
+        )
+        decode_statistics.append({
+            "source_video": str(video_path.relative_to(dataset)),
+            **decoder_stats,
+        })
+        for decoded_index, image in decoded.items():
+            for ep, local_index in targets[decoded_index]:
+                ep_dir = output / f"episode-{ep:06d}"
+                ep_dir.mkdir(exist_ok=True)
+                path = ep_dir / f"frame-{local_index:06d}.jpg"
+                image.save(path, quality=jpeg_quality, optimize=True)
+                display_path = path
+                evidence: Dict[str, Any] = {
+                    "episode_index": ep,
+                    "frame_index": local_index,
+                    "absolute_video_frame": decoded_index,
+                    "source_video": str(video_path.relative_to(dataset)),
+                    "image": str(path),
+                    "mano_status": "disabled",
+                }
+                if mano_renderer:
+                    try:
+                        record = mano_records[(ep, local_index)]
+                        overlay, metrics = mano_renderer.render(image, record)
+                        overlay_path = ep_dir / f"frame-{local_index:06d}-mano.jpg"
+                        overlay.save(overlay_path, quality=jpeg_quality, optimize=True)
+                        display_path = overlay_path
+                        evidence.update(
+                            {
+                                "mano_status": "rendered",
+                                "overlay_image": str(overlay_path),
+                                "mano_metrics": metrics,
+                            }
+                        )
+                    except Exception as error:  # visual evidence must not stop QC
+                        overlay_failures += 1
+                        evidence.update(
+                            {
+                                "mano_status": "failed",
+                                "mano_error": f"{type(error).__name__}: {error}",
+                            }
+                        )
+                contact_frames[ep].append((local_index, display_path))
+                manifest.append(evidence)
 
     for ep, frames in contact_frames.items():
         frames.sort()
@@ -377,4 +469,23 @@ def extract_samples(
         "mano_enabled": mano_renderer is not None,
         "mano_frames_rendered": sum(row["mano_status"] == "rendered" for row in manifest),
         "mano_failures": overlay_failures,
+        "decode": {
+            "seek_enabled": seek,
+            "videos_seek_attempted": sum(
+                bool(item["seek_attempted"]) for item in decode_statistics
+            ),
+            "videos_seek_succeeded": sum(
+                bool(item["seek_succeeded"]) for item in decode_statistics
+            ),
+            "videos_sequential_fallback": sum(
+                bool(item["sequential_fallback"]) for item in decode_statistics
+            ),
+            "decoded_frames": sum(
+                int(item["decoded_frames"]) for item in decode_statistics
+            ),
+            "missing_frames": sum(
+                len(item["missing_frames"]) for item in decode_statistics
+            ),
+            "per_video": decode_statistics,
+        },
     }
