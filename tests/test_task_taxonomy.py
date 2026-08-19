@@ -39,6 +39,20 @@ class TaskTaxonomyTests(unittest.TestCase):
                 self.assertIn(expected, label["interaction_primitives"])
                 self.assertFalse(label["requires_semantic_review"])
 
+    def test_common_chinese_supplier_phrasing_is_covered(self):
+        taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())
+        examples = {
+            "将彩色积木拼装到底座上": "assemble_disassemble",
+            "将鞋带穿过白色鞋子的鞋眼": "tie_untie",
+            "在水槽中冲洗金属碗": "wipe_clean",
+            "用刀在砧板上剁碎食材": "cut_slice",
+        }
+        for task, expected in examples.items():
+            with self.subTest(task=task):
+                label = classify_task(task, taxonomy)
+                self.assertIn(expected, label["interaction_primitives"])
+                self.assertFalse(label["requires_semantic_review"])
+
     def test_batch_enriches_records(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
