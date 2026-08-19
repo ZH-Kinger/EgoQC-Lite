@@ -220,3 +220,9 @@ def test_gold_review_defaults_to_machine_assisted_confirmation():
     assert "机器证据" in REVIEW_HTML
     assert "看到了什么（可多选）" not in REVIEW_HTML
     assert "首个坏点（秒，可空）" not in REVIEW_HTML
+    panel_source = REVIEW_HTML.split("function goldPanel", 1)[1].split(
+        "function card", 1
+    )[0]
+    assert panel_source.index('class="media-tabs"') < panel_source.index(
+        'class="problem-title"'
+    )
