@@ -44,6 +44,7 @@ from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .teacher_queue import build_overlay_teacher_queue, merge_teacher_queues
+from .training_partition import freeze_training_partition
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
 from .synthetic_qc import build_synthetic_qc_training
@@ -392,6 +393,15 @@ def main() -> None:
     queue_merge.add_argument("--output", type=Path, required=True)
     queue_merge.add_argument("--maximum-requests", type=int)
     queue_merge.add_argument("--seed", type=int, default=17)
+    partition = sub.add_parser(
+        "freeze-training-partition",
+        help="按原视频组冻结 teacher-train、Gold validation 与 Gold test，阻断数据泄漏",
+    )
+    partition.add_argument("--teacher-queue", type=Path, required=True)
+    partition.add_argument("--gold-events", type=Path, required=True)
+    partition.add_argument("--output", type=Path, required=True)
+    partition.add_argument("--validation-fraction", type=float, default=0.5)
+    partition.add_argument("--seed", type=int, default=29)
     overlay_queue = sub.add_parser(
         "build-overlay-teacher-queue",
         help="把 Gold MANO 叠加短片绑定到教师请求，保留 raw 溯源",
@@ -1044,6 +1054,15 @@ def main() -> None:
             args.queues,
             args.output,
             maximum_requests=args.maximum_requests,
+            seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "freeze-training-partition":
+        summary = freeze_training_partition(
+            args.teacher_queue,
+            args.gold_events,
+            args.output,
+            validation_fraction=args.validation_fraction,
             seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
