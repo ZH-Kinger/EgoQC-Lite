@@ -12,6 +12,7 @@ from .report import write_json, write_jsonl
 
 
 RAW_UNOBSERVABLE_TASKS = {"mano_overlay_drift"}
+TARGETED_HAND_ABSENCE_TIER = "targeted-hand-absence"
 
 
 def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -56,6 +57,53 @@ def _request_id(episode_id: str, start_s: float, end_s: float) -> str:
     return "egodex-" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
 
 
+def _only_hand_absence_failed(row: Dict[str, Any]) -> bool:
+    gates = row.get("hard_gates") or {}
+    expected = {
+        "duration_at_least_minimum",
+        "fps_at_least_minimum",
+        "resolution_at_least_720p",
+        "continuous_hand_visibility_at_least_minimum",
+        "hand_absence_not_over_limit",
+        "no_audio",
+    }
+    return (
+        expected.issubset(gates)
+        and not bool(gates["hand_absence_not_over_limit"])
+        and all(bool(gates[name]) for name in expected - {"hand_absence_not_over_limit"})
+    )
+
+
+def _hand_absence_window(row: Dict[str, Any], window_s: float) -> tuple[float, float]:
+    try:
+        import h5py
+        import numpy as np
+    except ImportError as error:
+        raise RuntimeError("定向手部离画窗口需要 h5py 和 numpy") from error
+    with h5py.File(row["hdf5_path"], "r") as handle:
+        left = np.asarray(handle["confidences/leftHand"], dtype=np.float32)
+        right = np.asarray(handle["confidences/rightHand"], dtype=np.float32)
+    visible = (np.isfinite(left) & (left >= 0.5)) | (np.isfinite(right) & (right >= 0.5))
+    best_start = best_end = run_start = 0
+    in_gap = False
+    for index, present in enumerate(visible):
+        if not present and not in_gap:
+            run_start = index
+            in_gap = True
+        if present and in_gap:
+            if index - run_start > best_end - best_start:
+                best_start, best_end = run_start, index
+            in_gap = False
+    if in_gap and len(visible) - run_start > best_end - best_start:
+        best_start, best_end = run_start, len(visible)
+    fps = float((row.get("video") or {}).get("fps") or 30.0)
+    duration_s = float(row["duration_s"])
+    gap_center_s = ((best_start + best_end) / 2.0) / fps
+    clip_duration = min(window_s, duration_s)
+    start_s = min(max(0.0, gap_center_s - clip_duration / 2.0), duration_s - clip_duration)
+    return start_s, start_s + clip_duration
+
+
 def build_egodex_review_batch(
     profiles: Path,
     task_config: Path,
@@ -66,11 +114,12 @@ def build_egodex_review_batch(
     maximum_clean: Optional[int] = None,
     maximum_hard_negative: Optional[int] = None,
     maximum_review: Optional[int] = 128,
+    maximum_hand_absence: Optional[int] = 0,
     seed: int = 17,
 ) -> Dict[str, Any]:
     if window_s <= 0:
         raise ValueError("window_s 必须大于 0")
-    for value in (maximum_clean, maximum_hard_negative, maximum_review):
+    for value in (maximum_clean, maximum_hard_negative, maximum_review, maximum_hand_absence):
         if value is not None and value < 0:
             raise ValueError("maximum_* 不能小于 0")
     profiles = profiles.expanduser().resolve()
@@ -97,6 +146,21 @@ def build_egodex_review_batch(
             maximum,
             seed,
         ))
+    hand_absence_rows = []
+    if maximum_hand_absence:
+        candidates = _balanced_limit(
+            [row for row in rows if _only_hand_absence_failed(row)],
+            maximum_hand_absence,
+            seed + 101,
+        )
+        for source in candidates:
+            row = dict(source)
+            row["candidate_tier"] = TARGETED_HAND_ABSENCE_TIER
+            row["target_clip_start_s"], row["target_clip_end_s"] = _hand_absence_window(
+                row, window_s
+            )
+            hand_absence_rows.append(row)
+        selected.extend(hand_absence_rows)
     selected.sort(key=lambda row: (row["candidate_tier"], row["episode_id"]))
 
     config = json.loads(task_config.read_text(encoding="utf-8"))
@@ -113,8 +177,8 @@ def build_egodex_review_batch(
     for row in selected:
         duration_s = float(row["duration_s"])
         clip_duration = min(window_s, duration_s)
-        start_s = max(0.0, (duration_s - clip_duration) / 2.0)
-        end_s = start_s + clip_duration
+        start_s = float(row.get("target_clip_start_s", max(0.0, (duration_s - clip_duration) / 2.0)))
+        end_s = float(row.get("target_clip_end_s", start_s + clip_duration))
         request_id = _request_id(row["episode_id"], start_s, end_s)
         context = {
             "candidate_tier": row["candidate_tier"],
@@ -154,7 +218,10 @@ def build_egodex_review_batch(
             "schema_version": "egoqc-visual-teacher-request-v1",
             "prompt_version": "egoqc-visual-teacher-v3-open-world",
             "candidate_tasks": model_tasks,
-            "trigger_tasks": [],
+            "trigger_tasks": (
+                ["hand_absent"]
+                if row["candidate_tier"] == TARGETED_HAND_ABSENCE_TIER else []
+            ),
             "event_codes": [],
             "selection_source": f"egodex_{row['candidate_tier']}",
             "assessment_dimensions": dimensions,
@@ -191,6 +258,7 @@ def build_egodex_review_batch(
         tier: sum(row["candidate_tier"] == tier for row in selected)
         for tier in limits
     }
+    tier_counts[TARGETED_HAND_ABSENCE_TIER] = len(hand_absence_rows)
     summary = {
         "schema_version": "egoqc-egodex-review-batch-v1",
         "profiles": str(profiles),
