@@ -9,6 +9,13 @@
   },
   "data_protocol": {
     "unit": "reviewed_clip",
+    "input_profiles": [
+      "raw_video_only",
+      "raw_video_with_text",
+      "video_with_partial_camera_or_hand_predictions",
+      "fully_annotated_lerobot_v3"
+    ],
+    "missing_optional_modality_policy": "mask_dependent_objective_and_report_unavailable_never_impute_ground_truth",
     "split_precedence": ["supplier_id", "person_id", "operator_id", "collection_session_id"],
     "validation_role": "threshold_selection_and_calibration_only",
     "test_role": "locked_single_evaluation",

@@ -49,6 +49,7 @@ from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
 from .egodex_review_batch import build_egodex_review_batch
 from .multisource_discovery import discover_lerobot_roots
+from .generic_ego import build_generic_ego_views
 from .task_taxonomy import classify_task_records
 from .registry import (
     create_manifest,
@@ -148,6 +149,26 @@ def main() -> None:
     )
     adapter.add_argument("--config", type=Path, default=default_config)
     adapter.add_argument("--output", type=Path)
+    generic_ego = sub.add_parser(
+        "build-generic-ego-views",
+        help="只读发现通用 raw ego 视频，探测能力并生成缺失模态感知的训练/质检 manifest",
+    )
+    generic_ego.add_argument("dataset", type=Path)
+    generic_ego.add_argument("--output", type=Path, required=True)
+    generic_ego.add_argument("--source-dataset")
+    generic_ego.add_argument(
+        "--source-class",
+        choices=("generic_ego", "public_dataset", "supplier_dataset", "internal_dataset"),
+        default="generic_ego",
+    )
+    generic_ego.add_argument("--license-id")
+    generic_ego.add_argument("--workers", type=int, default=16)
+    generic_ego.add_argument("--maximum-depth", type=int)
+    generic_ego.add_argument("--limit", type=int)
+    generic_ego.add_argument(
+        "--video-check", choices=("header", "count", "sample-quality"), default="header"
+    )
+    generic_ego.add_argument("--config", type=Path, default=default_config)
     completion_plan = sub.add_parser(
         "plan-completion",
         help="分析公开 LeRobot 数据的非关键缺失字段并生成安全补齐计划",
@@ -698,6 +719,21 @@ def main() -> None:
         )
         if args.output:
             write_json(args.output.expanduser(), summary)
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-generic-ego-views":
+        generic_config = load_config(args.config.expanduser())
+        summary = build_generic_ego_views(
+            args.dataset,
+            args.output,
+            source_dataset=args.source_dataset,
+            source_class=args.source_class,
+            license_id=args.license_id,
+            workers=args.workers,
+            maximum_depth=args.maximum_depth,
+            limit=args.limit,
+            video_check=args.video_check,
+            video_options=generic_config.get("video_check", {}),
+        )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-completion":
         summary = plan_public_completion(

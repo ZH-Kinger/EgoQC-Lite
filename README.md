@@ -23,6 +23,10 @@ person/session 聚类置信区间和供应商 worst-group。协议见
 起步量、用途和隔离要求见 `docs/qc-model-data-plan.md`。视觉教师只读取规则召回的 4–8 秒
 片段和少量未标注随机对照，不扫描全量视频。
 
+未经 LeRobot/MANO/SLAM 处理的普通 MP4/MOV ego 数据可直接使用
+`egoqc build-generic-ego-views`。管线按实际能力关闭依赖缺失模态的指标，缺少 MANO 不等于
+数据不合格。说明见 [`docs/generic-ego-adapter.md`](docs/generic-ego-adapter.md)。
+
 公开数据集缺少非关键字段时，先生成字段级补齐计划，再把确定性派生字段写入
 独立 Parquet overlay。该过程不复制或覆盖 raw，不会把模型估计、默认值或名义
 时间轴伪装成上游 Ground Truth：

@@ -22,6 +22,7 @@ from .canonical import (
 )
 from .video import probe_video
 from .types import Issue
+from .generic_ego import inspect_generic_ego_video
 
 
 LEGACY_COLUMNS = [
@@ -686,6 +687,12 @@ def inspect_adapter(
     video_options: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     adapter_name = detect_adapter(dataset)
+    if adapter_name == "raw_video":
+        return inspect_generic_ego_video(
+            dataset,
+            mode=video_check,
+            video_options=video_options,
+        )
     if adapter_name == "rekadaily_raw":
         adapter = RekaDailyRawAdapter()
         if episode is None:

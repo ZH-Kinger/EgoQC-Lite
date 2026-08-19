@@ -23,6 +23,9 @@
 - 相同 supplier/person/operator/session、原视频及相邻派生 clip 不得跨 validation/test。
 - 至少保留一个未见供应商或未见相机作为 external test。
 - 原始 OSS 数据保持只读；所有派生物必须包含 source revision/ETag 和代码版本。
+- 研究数据必须同时覆盖 raw-video-only、video+text、部分相机/手部预测和完整 LeRobot v3；
+  不能只在已经清洗和重建过的数据上报告结果。
+- 缺失可选模态时关闭依赖目标并报告 unavailable，不能用零向量伪造 MANO、轨迹或触觉真值。
 
 ## 3. 主要与次要终点
 
