@@ -19,6 +19,7 @@ from .report import write_json, write_jsonl
 
 SCHEMA_VERSION = "egoqc-queue-gold-review-v1"
 _OVERLAY_RENDERER: Optional[ManoOverlayRenderer] = None
+_GOLD_LABEL_MAP = {str(row["code"]): str(row["label"]) for row in GOLD_LABELS}
 
 
 def _read_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
@@ -53,6 +54,55 @@ def _balanced(rows: Sequence[Dict[str, Any]], maximum: int, seed: int) -> List[D
         if queues[key]:
             active.append(key)
     return selected
+
+
+def _teacher_preview(
+    row: Dict[str, Any], *, probability_threshold: float = 0.5
+) -> Dict[str, Any]:
+    raw_path = str(row.get("output_path") or "").strip()
+    if not raw_path:
+        return {}
+    path = Path(raw_path).expanduser()
+    if not path.is_file():
+        return {}
+    try:
+        label = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if label.get("schema_version") != "egoqc-visual-teacher-v1":
+        return {}
+    task_scores: Dict[str, Dict[str, float]] = {}
+    predicted = []
+    for code, values in (label.get("tasks") or {}).items():
+        if not isinstance(values, dict):
+            continue
+        probability = float(values.get("probability") or 0.0)
+        confidence = float(values.get("confidence") or 0.0)
+        task_scores[str(code)] = {
+            "probability": probability,
+            "confidence": confidence,
+        }
+        if probability >= probability_threshold:
+            predicted.append(str(code))
+    overall = label.get("overall") or {}
+    findings = [
+        value for value in (label.get("findings") or []) if isinstance(value, dict)
+    ]
+    return {
+        "artifact": str(path.resolve()),
+        "teacher_model": label.get("teacher_model"),
+        "prompt_version": label.get("prompt_version"),
+        "predicted_tasks": sorted(predicted),
+        "task_scores": task_scores,
+        "overall": {
+            "training_usable": overall.get("training_usable"),
+            "recommended_route": overall.get("recommended_route"),
+            "confidence": overall.get("confidence"),
+        },
+        "summary": label.get("summary"),
+        "findings": findings,
+        "probability_threshold": probability_threshold,
+    }
 
 
 def _signature(path: Path) -> Dict[str, Any]:
@@ -206,8 +256,55 @@ def build_queue_gold_review(
             continue
         clip_duration = float(row["clip_end_s"]) - float(row["clip_start_s"])
         clip_path = media.get(request_id, str(row["source_uri"]))
-        event_codes = [str(value) for value in (row.get("event_codes") or [])]
+        teacher = _teacher_preview(row)
+        event_codes = list(dict.fromkeys([
+            *[str(value) for value in (row.get("event_codes") or [])],
+            *[str(value) for value in (teacher.get("predicted_tasks") or [])],
+        ]))
         selection_source = str(row.get("selection_source") or "unknown_selection")
+        teacher_route = str(
+            (teacher.get("overall") or {}).get("recommended_route") or ""
+        )
+        if teacher_route == "reject":
+            baseline_tier = "bronze"
+        elif teacher_route == "accept":
+            baseline_tier = "gold"
+        elif teacher:
+            baseline_tier = "silver"
+        else:
+            baseline_tier = (
+                "bronze"
+                if selection_source == "deterministic_bad_frame"
+                else "silver"
+            )
+        fps = float(row.get("fps") or 30.0)
+        teacher_frames = []
+        for finding in teacher.get("findings") or []:
+            for field in ("start_s", "end_s"):
+                try:
+                    teacher_frames.append(round(float(finding[field]) * fps))
+                except (KeyError, TypeError, ValueError):
+                    continue
+        sample_frames = list(dict.fromkeys([
+            *[
+                int(frame) - int(row.get("clip_start_frame") or 0)
+                for frame in (row.get("event_frames") or [])
+                if int(frame) >= int(row.get("clip_start_frame") or 0)
+            ],
+            *teacher_frames,
+        ]))
+        visual_evidence = str(row.get("visual_evidence") or "raw_video")
+        unavailable_labels = (
+            ["mano_overlay_drift"]
+            if "mano" not in visual_evidence.lower()
+            and row.get("parent_episode_index") is None
+            else []
+        )
+        available_gold_labels = [
+            value
+            for value in GOLD_LABELS
+            if str(value["code"]) not in unavailable_labels
+        ]
         events.append({
             "event_id": f"queue-gold--{request_id}",
             "video_id": request_id,
@@ -232,26 +329,38 @@ def build_queue_gold_review(
             "selection_source": selection_source,
             "trigger_tasks": row.get("trigger_tasks") or [],
             "issue_codes": event_codes,
-            "issue_labels": {code: ISSUE_LABELS.get(code, code) for code in event_codes},
+            "issue_labels": {
+                code: ISSUE_LABELS.get(code, _GOLD_LABEL_MAP.get(code, code))
+                for code in event_codes
+            },
             "issue_descriptions": {
                 code: ISSUE_DESCRIPTIONS.get(
-                    code, "机器规则召回该片段，请区分真实快速动作与追踪异常。"
+                    code,
+                    (
+                        "视觉教师预测该问题，"
+                        f"p={(teacher.get('task_scores') or {}).get(code, {}).get('probability', 0.0):.2f}，"
+                        "请结合视频独立确认。"
+                        if code in (teacher.get("predicted_tasks") or [])
+                        else "机器规则召回该片段，请区分真实快速动作与追踪异常。"
+                    ),
                 )
                 for code in event_codes
             },
-            "sample_frames": [
-                int(frame) - int(row.get("clip_start_frame") or 0)
-                for frame in (row.get("event_frames") or [])
-                if int(frame) >= int(row.get("clip_start_frame") or 0)
-            ],
-            "fps": float(row.get("fps") or 30.0),
-            "baseline_tier": "bronze" if selection_source == "deterministic_bad_frame" else "silver",
-            "gold_labels": GOLD_LABELS,
+            "sample_frames": sample_frames,
+            "fps": fps,
+            "baseline_tier": baseline_tier,
+            "gold_labels": available_gold_labels,
+            "unavailable_gold_labels": unavailable_labels,
             "cause_options": CAUSE_OPTIONS,
             "raw_clip_path": clip_path,
             "original_clip_start_s": float(row["clip_start_s"]),
             "original_clip_end_s": float(row["clip_end_s"]),
             "split_group": row.get("split_group"),
+            "machine_assessment_source": (
+                "api_vlm_teacher" if teacher else "deterministic_qc"
+            ),
+            "teacher_preview": teacher or None,
+            "visual_evidence": visual_evidence,
             "raw_source_readonly": True,
             "derived_media": materialize_media,
         })
