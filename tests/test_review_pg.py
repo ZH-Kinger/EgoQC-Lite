@@ -223,6 +223,8 @@ def test_gold_review_defaults_to_machine_assisted_confirmation():
     panel_source = REVIEW_HTML.split("function goldPanel", 1)[1].split(
         "function card", 1
     )[0]
-    assert panel_source.index('class="media-tabs"') < panel_source.index(
-        'class="problem-title"'
-    )
+    assert 'class="media-tabs"' not in panel_source
+    patch_source = REVIEW_HTML.split("function patchCard", 1)[1].split(
+        "function render", 1
+    )[0]
+    assert "${mediaControls(e)}" in patch_source
