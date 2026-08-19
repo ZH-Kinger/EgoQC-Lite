@@ -207,3 +207,13 @@ def test_error_taxonomy_and_type_filter_are_exposed():
     assert "data-filter=\"queue\" class=\"active\"" in REVIEW_HTML
     assert "filter:'queue'" in REVIEW_HTML
     assert "loadIdentity().then(refresh)" in REVIEW_HTML
+
+
+def test_gold_review_defaults_to_machine_assisted_confirmation():
+    assert "确认机器结论" in REVIEW_HTML
+    assert "有误报，展开修改" in REVIEW_HTML
+    assert "保存修正" in REVIEW_HTML
+    assert "workflow_version:'assisted-fast-v1'" in REVIEW_HTML
+    assert "goldDetails(e,'confirm_machine','confirmed')" in REVIEW_HTML
+    assert "看到了什么（可多选）" not in REVIEW_HTML
+    assert "首个坏点（秒，可空）" not in REVIEW_HTML
