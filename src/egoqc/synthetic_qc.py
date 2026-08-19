@@ -39,6 +39,11 @@ AUGMENTATIONS: Dict[str, Dict[str, Any]] = {
         "center_x_fraction": 0.50,
         "center_y_fraction": 0.72,
     },
+    "severe_lens_artifact": {
+        "kind": "radial_distortion",
+        "probability": 0.92,
+        "strength": 0.48,
+    },
 }
 
 
