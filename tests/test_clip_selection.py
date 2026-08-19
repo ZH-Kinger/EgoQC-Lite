@@ -14,6 +14,44 @@ def _read_jsonl(path: Path):
 
 
 class ClipSelectionTest(unittest.TestCase):
+    def test_clip_ids_are_unique_across_single_episode_dataset_roots(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            task_config = Path(__file__).parents[1] / "config" / "visual_model_tasks.json"
+            clip_ids = []
+            for name in ("dataset-a", "dataset-b"):
+                dataset = create_fixture(root / name, frames=300)
+                quality = root / f"{name}-quality"
+                quality.mkdir()
+                (quality / "episodes.jsonl").write_text(
+                    json.dumps({"episode_index": 0, "length": 300}) + "\n",
+                    encoding="utf-8",
+                )
+                (quality / "bad_frames.jsonl").write_text(
+                    json.dumps({
+                        "episode_index": 0,
+                        "frame_index": 150,
+                        "code": "temporal_spike",
+                        "severity": "error",
+                    }) + "\n",
+                    encoding="utf-8",
+                )
+                plan_qc_clips(
+                    dataset,
+                    quality,
+                    root / f"{name}-out",
+                    task_config,
+                    maximum_clips=1,
+                    minimum_control_clips=0,
+                    source_class="supplier_dataset",
+                    source_dataset="shared-source",
+                    supplier_id="shared-supplier",
+                )
+                queue = _read_jsonl(root / f"{name}-out" / "teacher-api-queue.jsonl")
+                clip_ids.append(queue[0]["request_id"])
+
+            self.assertEqual(len(set(clip_ids)), 2)
+
     def test_merges_events_keeps_aggregate_offset_and_skips_rule_only_api(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

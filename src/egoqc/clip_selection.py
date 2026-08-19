@@ -458,7 +458,10 @@ def plan_qc_clips(
         source_start_s = episode_offset_s + start_s
         source_end_s = episode_offset_s + end_s
         clip_id = _clip_id(
-            f"{source_dataset or dataset.name}:{supplier_id or 'unknown-supplier'}",
+            (
+                f"{source_dataset or dataset.name}:"
+                f"{supplier_id or 'unknown-supplier'}:{video_path}"
+            ),
             episode_index,
             candidate["start_frame"],
             candidate["end_frame"],
