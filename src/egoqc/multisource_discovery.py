@@ -140,8 +140,20 @@ def discover_lerobot_roots(
                 })
     records.sort(key=lambda row: row["logical_path"])
     errors.sort(key=lambda row: row["dataset_root"])
+    required_capabilities = (
+        "video", "state", "state_mask", "intrinsics", "extrinsics"
+    )
+    complete_records = [
+        row
+        for row in records
+        if all(row["capability_hints"].get(key) for key in required_capabilities)
+    ]
+    incomplete_records = [
+        row for row in records if row not in complete_records
+    ]
     output.mkdir(parents=True, exist_ok=True)
     write_jsonl(output / "datasets.jsonl", records)
+    write_jsonl(output / "incomplete-datasets.jsonl", incomplete_records)
     write_jsonl(output / "errors.jsonl", errors)
     dataset_list = output / "dataset-list.txt"
     temporary = dataset_list.with_name(f".{dataset_list.name}.tmp")
@@ -149,11 +161,22 @@ def discover_lerobot_roots(
         "".join(f"{row['dataset_root']}\n" for row in records), encoding="utf-8"
     )
     temporary.replace(dataset_list)
+    complete_dataset_list = output / "complete-dataset-list.txt"
+    temporary_complete = complete_dataset_list.with_name(
+        f".{complete_dataset_list.name}.tmp"
+    )
+    temporary_complete.write_text(
+        "".join(f"{row['dataset_root']}\n" for row in complete_records),
+        encoding="utf-8",
+    )
+    temporary_complete.replace(complete_dataset_list)
     summary = {
         "schema_version": "egoqc-multisource-discovery-v1",
         "source_root": str(source_root),
         "source_readonly": True,
         "dataset_roots": len(records),
+        "complete_dataset_roots": len(complete_records),
+        "incomplete_dataset_roots": len(incomplete_records),
         "task_groups": len({row["task_group"] for row in records}),
         "available_task_groups": len(all_task_roots),
         "errors": len(errors),
@@ -172,6 +195,8 @@ def discover_lerobot_roots(
         "artifacts": {
             "datasets": str(output / "datasets.jsonl"),
             "dataset_list": str(dataset_list),
+            "complete_dataset_list": str(complete_dataset_list),
+            "incomplete_datasets": str(output / "incomplete-datasets.jsonl"),
             "errors": str(output / "errors.jsonl"),
         },
     }

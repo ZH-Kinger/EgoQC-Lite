@@ -40,6 +40,10 @@ class MultisourceDiscoveryTests(unittest.TestCase):
             self.assertEqual(
                 len((output / "dataset-list.txt").read_text().splitlines()), 4
             )
+            self.assertEqual(
+                len((output / "complete-dataset-list.txt").read_text().splitlines()),
+                4,
+            )
 
     def test_ignores_non_directory_entries_in_task_root(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -64,6 +68,10 @@ class MultisourceDiscoveryTests(unittest.TestCase):
 
             self.assertEqual(summary["dataset_roots"], 1)
             self.assertEqual(summary["errors"], 0)
+            self.assertEqual(summary["complete_dataset_roots"], 0)
+            self.assertEqual(
+                (output / "complete-dataset-list.txt").read_text(), ""
+            )
 
     def test_can_bound_number_of_task_groups(self):
         with tempfile.TemporaryDirectory() as temporary:
