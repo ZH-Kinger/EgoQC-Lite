@@ -57,6 +57,10 @@ def test_plan_and_run_interventions_without_mutating_source(tmp_path: Path) -> N
     assert summary["by_family"]["wrist_position_offset"]["target_hit_rate"] == 1.0
     assert summary["by_family"]["state_mask_dropout"]["target_hit_rate"] == 1.0
     assert (tmp_path / "derived" / "run" / "evidence-deltas.jsonl").is_file()
+    sample_plan = _jsonl(tmp_path / "derived" / "run" / "sample-plan.jsonl")
+    assert len(sample_plan) == 1
+    assert sample_plan[0]["synthetic"] is False
+    assert sample_plan[0]["frame_indices"]
     assert _sha256(source) == before
 
 

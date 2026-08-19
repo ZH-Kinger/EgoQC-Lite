@@ -523,6 +523,7 @@ def run_qc_interventions(
     current_shard: Optional[pa.Table] = None
     baseline_cache: Dict[int, Any] = {}
     baseline_rows: List[Dict[str, Any]] = []
+    sample_plan_rows: List[Dict[str, Any]] = []
     delta_records: List[Dict[str, Any]] = []
     run_records: List[Dict[str, Any]] = []
 
@@ -573,9 +574,19 @@ def run_qc_interventions(
                 "schema_version": RUN_SCHEMA_VERSION,
                 "dataset_id": record["dataset_id"],
                 "episode_index": episode_index,
+                "length": length,
+                "tasks": record.get("tasks", []),
+                "source_data_file": file_name,
                 "tier": baseline.tier,
                 "issue_codes": sorted({issue.code for issue in baseline.issues}),
+                "sample_frames": list(baseline.sample_frames),
                 "evidence": vector,
+            })
+            sample_plan_rows.append({
+                "episode_index": episode_index,
+                "frame_indices": list(baseline.sample_frames),
+                "selection_source": "ie_qc_original_baseline",
+                "synthetic": False,
             })
         baseline = baseline_cache[episode_index]
         baseline_vector = _evidence_vector(baseline, start, end)
@@ -680,6 +691,7 @@ def run_qc_interventions(
         }
 
     write_jsonl(output / "baseline-evidence.jsonl", baseline_rows)
+    write_jsonl(output / "sample-plan.jsonl", sample_plan_rows)
     write_jsonl(output / "intervention-runs.jsonl", run_records)
     write_jsonl(output / "evidence-deltas.jsonl", delta_records)
     write_jsonl(output / "monotonicity.jsonl", monotonic_checks)
@@ -705,6 +717,7 @@ def run_qc_interventions(
         ),
         "artifacts": {
             "baselines": str(output / "baseline-evidence.jsonl"),
+            "sample_plan": str(output / "sample-plan.jsonl"),
             "runs": str(output / "intervention-runs.jsonl"),
             "deltas": str(output / "evidence-deltas.jsonl"),
             "monotonicity": str(output / "monotonicity.jsonl"),

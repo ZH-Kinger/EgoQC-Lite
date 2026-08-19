@@ -74,6 +74,7 @@ egoqc run-qc-interventions /mnt/data/readonly/lerobot-v3 \
 | 文件 | 粒度 | 用途 |
 |---|---|---|
 | `baseline-evidence.jsonl` | episode | 保存未干预基线，不把原本存在的问题误算为干预响应 |
+| `sample-plan.jsonl` | episode | 原始基线的抽检帧，可直接交给现有 evidence/VLC 工作台 |
 | `intervention-runs.jsonl` | episode × family × level | 目标命中、区间定位、tier 和新增 issue |
 | `evidence-deltas.jsonl` | intervention × expert | 训练条件可靠性模型的长表 |
 | `monotonicity.jsonl` | episode × family | 比较 high 响应是否不低于 low |
@@ -98,6 +99,17 @@ egoqc run-qc-interventions /mnt/data/readonly/lerobot-v3 \
 
 这里的 `target_hit_rate` 只说明专家对合成破坏有反应，**不等于真实错误 recall/precision**。
 `target_event_interval_precision` 也只衡量坏帧是否落在已知干预区间，不是通用定位精度。
+
+需要人工检查原始基线时，直接复用现有可视化，不对合成干预作伪影像：
+
+```bash
+egoqc extract-samples /mnt/data/readonly/lerobot-v3 \
+  --plan /mnt/workspace/ie-qc/phase-a/evidence/sample-plan.jsonl \
+  --output /mnt/workspace/ie-qc/phase-a/review
+```
+
+输出包含 contact sheet、`review.html` 和 `episodes-vlc.xspf`。这里展示的是原始 episode，
+用于判断 baseline 的规则报警是否真实；干预区间和 evidence delta 仍通过 JSONL 对齐。
 
 ## Phase A 的真实停止条件
 
