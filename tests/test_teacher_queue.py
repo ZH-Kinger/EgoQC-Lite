@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from egoqc.teacher_queue import build_overlay_teacher_queue, merge_teacher_queues
+from egoqc.teacher_queue import (
+    build_overlay_teacher_queue,
+    merge_teacher_queues,
+    normalize_teacher_queue_provenance,
+)
 
 
 def _write_queue(path: Path, source: str, selection: str, count: int) -> None:
@@ -79,3 +83,26 @@ def test_build_overlay_teacher_queue_preserves_raw_provenance(tmp_path: Path) ->
     assert row["visual_evidence"] == "mano_mesh_skeleton_overlay"
     assert "mano_overlay_drift" in row["trigger_tasks"]
     assert row["output_path"].startswith(str((tmp_path / "out").resolve()))
+
+
+def test_normalize_legacy_egodex_queue_adds_safe_split_provenance(tmp_path: Path) -> None:
+    queue = tmp_path / "queue.jsonl"
+    queue.write_text(json.dumps({
+        "request_id": "egodex-one",
+        "source_uri": "/readonly/egodex/fold_paper/1.mp4",
+        "task": "fold_paper",
+        "selection_source": "egodex_review",
+    }) + "\n", encoding="utf-8")
+
+    summary = normalize_teacher_queue_provenance(queue, tmp_path / "out")
+    row = json.loads((tmp_path / "out/teacher-api-queue.jsonl").read_text())
+
+    assert summary["requests"] == 1
+    assert summary["split_groups"] == 1
+    assert row["source_class"] == "public_dataset"
+    assert row["source_dataset"] == "egodex"
+    assert row["supplier_id"] == "public:egodex"
+    assert row["tasks"] == ["fold_paper"]
+    assert row["split_group"].startswith("egodex:raw-video:")
+    assert row["split_group_source"] == "raw_source_uri"
+    assert row["raw_source_readonly"] is True

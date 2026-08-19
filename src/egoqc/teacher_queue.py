@@ -29,6 +29,108 @@ def _rank(request_id: str, seed: int) -> str:
     return hashlib.sha256(f"{seed}:{request_id}".encode("utf-8")).hexdigest()
 
 
+def normalize_teacher_queue_provenance(
+    queue: Path,
+    output: Path,
+    *,
+    source_class: Optional[str] = None,
+    source_dataset: Optional[str] = None,
+    supplier_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Upgrade legacy teacher queues with raw-video provenance and split groups."""
+
+    rows: List[Dict[str, Any]] = []
+    inferred = Counter()
+    for source_row in _read_jsonl(queue):
+        row = copy.deepcopy(source_row)
+        request_id = str(row.get("request_id") or "")
+        if not request_id:
+            raise ValueError("教师队列包含缺少 request_id 的记录")
+        raw_source = str(row.get("raw_source_uri") or row.get("source_uri") or "")
+        if not raw_source:
+            raise ValueError(f"request_id={request_id} 缺少 source_uri")
+
+        dataset_value = source_dataset or row.get("source_dataset")
+        if not dataset_value and request_id.startswith("egodex-"):
+            dataset_value = "egodex"
+            inferred["source_dataset"] += 1
+        if not dataset_value:
+            raise ValueError(
+                f"request_id={request_id} 缺少 source_dataset；请通过参数明确指定"
+            )
+        dataset_value = str(dataset_value)
+
+        class_value = source_class or row.get("source_class")
+        if not class_value and dataset_value == "egodex":
+            class_value = "public_dataset"
+            inferred["source_class"] += 1
+        if not class_value:
+            raise ValueError(
+                f"request_id={request_id} 缺少 source_class；请通过参数明确指定"
+            )
+        class_value = str(class_value)
+
+        supplier_value = supplier_id or row.get("supplier_id")
+        if not supplier_value and class_value == "public_dataset":
+            supplier_value = f"public:{dataset_value}"
+            inferred["supplier_id"] += 1
+
+        split_group = row.get("split_group")
+        if not split_group:
+            digest = hashlib.sha256(raw_source.encode("utf-8")).hexdigest()[:20]
+            split_group = f"{dataset_value}:raw-video:{digest}"
+            inferred["split_group"] += 1
+
+        raw_tasks = row.get("tasks")
+        if not raw_tasks:
+            task = str(row.get("task") or "").strip()
+            raw_tasks = [task] if task else []
+            if raw_tasks:
+                inferred["tasks"] += 1
+
+        row.update({
+            "source_class": class_value,
+            "source_dataset": dataset_value,
+            "supplier_id": supplier_value,
+            "raw_source_uri": raw_source,
+            "split_group": str(split_group),
+            "split_group_source": str(
+                row.get("split_group_source") or "raw_source_uri"
+            ),
+            "tasks": raw_tasks,
+            "task_id": row.get("task_id") or row.get("task"),
+            "source_readonly": True,
+            "raw_source_readonly": True,
+        })
+        rows.append(row)
+
+    output = output.expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    artifact = output / "teacher-api-queue.jsonl"
+    write_jsonl(artifact, rows)
+    summary = {
+        "schema_version": "egoqc-normalized-teacher-queue-v1",
+        "input_queue": str(queue.expanduser().resolve()),
+        "requests": len(rows),
+        "source_counts": dict(
+            Counter(str(row["source_dataset"]) for row in rows)
+        ),
+        "source_class_counts": dict(
+            Counter(str(row["source_class"]) for row in rows)
+        ),
+        "selection_counts": dict(
+            Counter(str(row.get("selection_source") or "unknown_selection") for row in rows)
+        ),
+        "split_groups": len({str(row["split_group"]) for row in rows}),
+        "inferred_field_counts": dict(inferred),
+        "raw_source_readonly": True,
+        "code_version": code_version(),
+        "queue": str(artifact),
+    }
+    write_json(output / "summary.json", summary)
+    return summary
+
+
 def merge_teacher_queues(
     queues: Sequence[Path],
     output: Path,

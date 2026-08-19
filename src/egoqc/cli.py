@@ -43,7 +43,11 @@ from .research_evaluation import evaluate_qc_research_protocol
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
-from .teacher_queue import build_overlay_teacher_queue, merge_teacher_queues
+from .teacher_queue import (
+    build_overlay_teacher_queue,
+    merge_teacher_queues,
+    normalize_teacher_queue_provenance,
+)
 from .training_partition import freeze_training_partition
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
@@ -393,6 +397,18 @@ def main() -> None:
     queue_merge.add_argument("--output", type=Path, required=True)
     queue_merge.add_argument("--maximum-requests", type=int)
     queue_merge.add_argument("--seed", type=int, default=17)
+    queue_normalize = sub.add_parser(
+        "normalize-teacher-queue",
+        help="为旧教师队列补齐 raw 溯源、数据治理字段和 split_group",
+    )
+    queue_normalize.add_argument("--queue", type=Path, required=True)
+    queue_normalize.add_argument("--output", type=Path, required=True)
+    queue_normalize.add_argument(
+        "--source-class",
+        choices=("public_dataset", "supplier_dataset", "internal_dataset"),
+    )
+    queue_normalize.add_argument("--source-dataset")
+    queue_normalize.add_argument("--supplier-id")
     partition = sub.add_parser(
         "freeze-training-partition",
         help="按原视频组冻结 teacher-train、Gold validation 与 Gold test，阻断数据泄漏",
@@ -1055,6 +1071,15 @@ def main() -> None:
             args.output,
             maximum_requests=args.maximum_requests,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "normalize-teacher-queue":
+        summary = normalize_teacher_queue_provenance(
+            args.queue,
+            args.output,
+            source_class=args.source_class,
+            source_dataset=args.source_dataset,
+            supplier_id=args.supplier_id,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "freeze-training-partition":
