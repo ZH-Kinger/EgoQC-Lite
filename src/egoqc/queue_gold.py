@@ -327,6 +327,8 @@ def build_queue_gold_review(
             "clip_end_frame": int(row.get("clip_end_frame") or 0),
             "tasks": row.get("tasks") or [],
             "selection_source": selection_source,
+            "baseline_qc": row.get("baseline_qc") or {},
+            "metrics": (row.get("baseline_qc") or {}).get("metrics") or {},
             "trigger_tasks": row.get("trigger_tasks") or [],
             "issue_codes": event_codes,
             "issue_labels": {

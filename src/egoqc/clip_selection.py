@@ -435,6 +435,16 @@ def plan_qc_clips(
     for candidate in candidates:
         episode_index = int(candidate["episode_index"])
         route = route_rows[episode_index]
+        episode_quality = episode_results[episode_index]
+        baseline_qc = {
+            "tier": episode_quality.get("tier"),
+            "issue_codes": sorted({
+                str(issue.get("code"))
+                for issue in (episode_quality.get("issues") or [])
+                if isinstance(issue, dict) and issue.get("code")
+            }),
+            "metrics": dict(episode_quality.get("metrics") or {}),
+        }
         video_path = (
             dataset
             / "videos"
@@ -548,6 +558,7 @@ def plan_qc_clips(
             "trigger_tasks": trigger_tasks,
             "event_codes": candidate["event_codes"],
             "selection_source": candidate["selection_source"],
+            "baseline_qc": baseline_qc,
             "assessment_dimensions": assessment_dimensions,
             "output_path": str(output / "teacher-labels" / clip_id / "teacher-label.json"),
             "required_response": {

@@ -86,6 +86,7 @@ class ClipSelectionTest(unittest.TestCase):
                 visual_request["trigger_tasks"],
                 ["mano_overlay_drift", "semantic_camera_shake"],
             )
+            self.assertEqual(visual_request["baseline_qc"]["metrics"], {})
 
     def test_clean_dataset_still_gets_deterministic_unlabeled_controls(self):
         with tempfile.TemporaryDirectory() as temporary:

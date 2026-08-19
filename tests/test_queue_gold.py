@@ -23,6 +23,10 @@ def test_build_queue_gold_review_is_balanced_and_clip_relative(tmp_path: Path) -
                     "clip_start_frame": 300,
                     "event_frames": [330],
                     "event_codes": ["temporal_spike"],
+                    "baseline_qc": {
+                        "tier": "bronze",
+                        "metrics": {"bad_frame_ratio": 0.2},
+                    },
                     "trigger_tasks": ["semantic_camera_shake"],
                     "split_group": f"{source}:video:1",
                 })
@@ -47,6 +51,7 @@ def test_build_queue_gold_review_is_balanced_and_clip_relative(tmp_path: Path) -
     }
     assert all(event["review_mode"] == "episode_gold" for event in events)
     assert all(event["sample_frames"] == [30] for event in events)
+    assert all(event["metrics"]["bad_frame_ratio"] == 0.2 for event in events)
     assert all(event["raw_source_readonly"] is True for event in events)
 
 
