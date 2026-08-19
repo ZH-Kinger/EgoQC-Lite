@@ -375,6 +375,11 @@ def main() -> None:
     clip_plan.add_argument("--minimum-control-clips", type=int, default=8)
     clip_plan.add_argument("--maximum-clips", type=int)
     clip_plan.add_argument("--seed", type=int, default=17)
+    clip_plan.add_argument(
+        "--source-class",
+        choices=("public_dataset", "supplier_dataset", "internal_dataset"),
+        help="数据治理类型；默认根据 supplier-id 推断",
+    )
     clip_plan.add_argument("--source-dataset")
     clip_plan.add_argument("--supplier-id")
     adapter_clip_plan = sub.add_parser(
@@ -959,6 +964,7 @@ def main() -> None:
             minimum_control_clips=args.minimum_control_clips,
             maximum_clips=args.maximum_clips,
             seed=args.seed,
+            source_class=args.source_class,
             source_dataset=args.source_dataset,
             supplier_id=args.supplier_id,
         )

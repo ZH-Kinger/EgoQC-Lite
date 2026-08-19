@@ -119,11 +119,63 @@ class ClipSelectionTest(unittest.TestCase):
             first_rows = _read_jsonl(root / "first" / "clip-candidates.jsonl")
             second_rows = _read_jsonl(root / "second" / "clip-candidates.jsonl")
 
-            self.assertEqual(first["selection_counts"], {"random_control_unlabeled": 2})
+            self.assertEqual(first["selection_counts"], {"deterministic_clean_gap_control": 2})
             self.assertEqual(
                 [(row["clip_id"], row["clip_start_s"]) for row in first_rows],
                 [(row["clip_id"], row["clip_start_s"]) for row in second_rows],
             )
+
+    def test_bounded_selection_keeps_controls_and_source_provenance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = create_fixture(root / "dataset", frames=900, episodes=3)
+            quality = root / "quality"
+            quality.mkdir()
+            (quality / "episodes.jsonl").write_text(
+                "".join(
+                    json.dumps({"episode_index": index, "length": 900}) + "\n"
+                    for index in range(3)
+                ),
+                encoding="utf-8",
+            )
+            events = [
+                {
+                    "episode_index": episode,
+                    "frame_index": frame,
+                    "code": "temporal_spike",
+                    "severity": "error",
+                }
+                for episode in range(3)
+                for frame in (150, 450, 750)
+            ]
+            (quality / "bad_frames.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in events),
+                encoding="utf-8",
+            )
+            task_config = Path(__file__).parents[1] / "config" / "visual_model_tasks.json"
+
+            summary = plan_qc_clips(
+                dataset,
+                quality,
+                root / "out",
+                task_config,
+                maximum_clips=5,
+                minimum_control_clips=1,
+                control_ratio=0.25,
+                source_class="supplier_dataset",
+                source_dataset="supplier-batch-a",
+                supplier_id="vendor-a",
+            )
+            clips = _read_jsonl(root / "out" / "clip-candidates.jsonl")
+            queue = _read_jsonl(root / "out" / "teacher-api-queue.jsonl")
+
+            self.assertEqual(summary["clips"], 5)
+            self.assertTrue(summary["bounded_streaming_selection"])
+            self.assertGreaterEqual(summary["produced_random_controls"], 1)
+            self.assertEqual({row["source_class"] for row in clips}, {"supplier_dataset"})
+            self.assertEqual({row["source_dataset"] for row in queue}, {"supplier-batch-a"})
+            self.assertEqual({row["supplier_id"] for row in queue}, {"vendor-a"})
+            self.assertTrue(all(row["split_group_source"] == "raw_source_uri" for row in queue))
 
 
 if __name__ == "__main__":

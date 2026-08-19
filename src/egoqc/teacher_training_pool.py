@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -17,6 +18,20 @@ def _read_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
         for line in handle:
             if line.strip():
                 yield json.loads(line)
+
+
+def _split_group(request: Dict[str, Any], source_dataset: str, source_uri: str) -> tuple[str, str, str]:
+    upstream = request.get("split_group")
+    if upstream:
+        return (
+            str(upstream),
+            str(request.get("split_group_source") or "upstream_split_group"),
+            str(request.get("leakage_risk") or "medium"),
+        )
+    digest = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:20]
+    if source_uri:
+        return f"{source_dataset}:raw-video:{digest}", "raw_source_uri", "low"
+    return str(request["request_id"]), "request_id_fallback", "high"
 
 
 def build_teacher_training_pool(
@@ -118,15 +133,22 @@ def build_teacher_training_pool(
         start_s = float(request["clip_start_s"])
         end_s = float(request["clip_end_s"])
         source_uri = str(request.get("raw_source_uri") or request["source_uri"])
+        source_dataset = str(request.get("source_dataset") or "unknown_dataset")
+        source_class = str(request.get("source_class") or "unknown")
+        split_group, split_group_source, leakage_risk = _split_group(
+            request, source_dataset, source_uri
+        )
         teacher_weight_cap = 0.5
         row = {
             "record_id": f"teacher:{request_id}",
             "video_id": request_id,
-            "source_class": "public_dataset",
-            "source_dataset": "egodex",
+            "source_class": source_class,
+            "source_dataset": source_dataset,
+            "supplier_id": request.get("supplier_id"),
+            "parent_episode_index": request.get("parent_episode_index"),
             "source_uri": source_uri,
-            "duration_s": end_s,
-            "activities": [str(request.get("task") or "")],
+            "duration_s": float(request.get("duration_s") or end_s),
+            "activities": list(request.get("tasks") or [str(request.get("task") or "")]),
             "candidate_tier": request.get("candidate_tier"),
             "provenance": {
                 "raw_immutable": True,
@@ -139,7 +161,7 @@ def build_teacher_training_pool(
                 "candidate": True,
                 "training_ready": True,
                 "split": "train",
-                "split_group": request_id,
+                "split_group": split_group,
                 "split_warning": "teacher_weak_label_train_only",
                 "allowed_objectives": ["qc_visual_semantics"],
                 "loss_masks": {
@@ -166,9 +188,9 @@ def build_teacher_training_pool(
                 "schema_version": "egoqc-qc-distillation-v1",
                 "tasks": tasks,
                 "split": "train",
-                "split_group": request_id,
-                "split_group_source": "request_id",
-                "leakage_risk": "high",
+                "split_group": split_group,
+                "split_group_source": split_group_source,
+                "leakage_risk": leakage_risk,
                 "label_scope": "reviewed_clip",
                 "clip_start_s": start_s,
                 "clip_end_s": end_s,

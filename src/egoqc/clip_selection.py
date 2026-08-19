@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-
-import numpy as np
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from .provenance import code_version
 from .report import write_json, write_jsonl
@@ -32,21 +31,62 @@ EVENT_TASKS = {
 }
 
 
-def _jsonl(path: Path) -> List[Dict[str, Any]]:
+def _iter_jsonl(path: Path) -> Iterator[Dict[str, Any]]:
     if not path.is_file():
-        return []
-    rows = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"{path} 第 {line_number} 行不是合法 JSON") from error
-        if not isinstance(row, dict):
-            raise ValueError(f"{path} 第 {line_number} 行必须是对象")
-        rows.append(row)
-    return rows
+        return
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"{path} 第 {line_number} 行不是合法 JSON") from error
+            if not isinstance(row, dict):
+                raise ValueError(f"{path} 第 {line_number} 行必须是对象")
+            yield row
+
+
+class _BoundedCandidateSampler:
+    """Keep a deterministic, priority-aware sample without retaining the corpus."""
+
+    def __init__(self, limit: Optional[int], seed: int):
+        self.limit = None if limit is None else max(0, int(limit))
+        self.seed = seed
+        self._serial = 0
+        self._heap: List[Tuple[int, int, Dict[str, Any]]] = []
+        self._rows: List[Dict[str, Any]] = []
+
+    def _rank(self, row: Dict[str, Any]) -> int:
+        priority_order = {"high": 0, "medium": 1, "normal": 2}
+        identity = ":".join((
+            str(self.seed),
+            str(row["episode_index"]),
+            str(row["start_frame"]),
+            str(row["end_frame"]),
+            str(row["selection_source"]),
+            ",".join(row.get("event_codes") or ()),
+        ))
+        digest = int(hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32], 16)
+        return priority_order.get(str(row.get("priority")), 3) * (1 << 128) + digest
+
+    def add(self, row: Dict[str, Any]) -> None:
+        if self.limit is None:
+            self._rows.append(row)
+            return
+        if self.limit == 0:
+            return
+        rank = self._rank(row)
+        item = (-rank, self._serial, row)
+        self._serial += 1
+        if len(self._heap) < self.limit:
+            heapq.heappush(self._heap, item)
+        elif rank < -self._heap[0][0]:
+            heapq.heapreplace(self._heap, item)
+
+    def rows(self) -> List[Dict[str, Any]]:
+        values = self._rows if self.limit is None else [item[2] for item in self._heap]
+        return sorted(values, key=self._rank)
 
 
 def _fps(dataset: Path, video_key: str) -> float:
@@ -104,8 +144,19 @@ def _window(
     return int(start), int(end)
 
 
-def _overlaps(start: int, end: int, intervals: Iterable[Tuple[int, int]]) -> bool:
-    return any(start < other_end and end > other_start for other_start, other_end in intervals)
+def _merge_intervals(intervals: Iterable[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    merged: List[Tuple[int, int]] = []
+    for start, end in sorted(intervals):
+        if not merged or start > merged[-1][1]:
+            merged.append((start, end))
+        else:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+    return merged
+
+
+def _source_group(source_dataset: str, source_uri: str) -> str:
+    digest = hashlib.sha256(source_uri.encode("utf-8")).hexdigest()[:20]
+    return f"{source_dataset}:raw-video:{digest}"
 
 
 def _clip_id(
@@ -135,6 +186,7 @@ def plan_qc_clips(
     minimum_control_clips: int = 8,
     maximum_clips: Optional[int] = None,
     seed: int = 17,
+    source_class: Optional[str] = None,
     source_dataset: Optional[str] = None,
     supplier_id: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -154,32 +206,65 @@ def plan_qc_clips(
     assessment_dimensions = dict(tasks_config.get("assessment_dimensions", {}))
     fps = _fps(dataset, video_key)
     episode_results = {
-        int(row["episode_index"]): row for row in _jsonl(quality_root / "episodes.jsonl")
+        int(row["episode_index"]): row for row in _iter_jsonl(quality_root / "episodes.jsonl")
     }
-    events_by_episode: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
-    for event in _jsonl(quality_root / "bad_frames.jsonl"):
-        episode_index = int(event["episode_index"])
-        frame_index = int(event["frame_index"])
-        if episode_index in episode_results and 0 <= frame_index < int(
-            episode_results[episode_index]["length"]
-        ):
-            events_by_episode[episode_index].append(event)
-
     route_rows = {int(row["episode_index"]): row for row in load_episode_index(dataset).to_pylist()}
-    candidates: List[Dict[str, Any]] = []
-    occupied: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
+    bounded_limit = None if maximum_clips is None else max(0, int(maximum_clips))
+    positive_sampler = _BoundedCandidateSampler(bounded_limit, seed)
+    control_sampler = _BoundedCandidateSampler(bounded_limit, seed + 1)
     merge_gap_frames = max(0, int(round(merge_gap_s * fps)))
     maximum_span_frames = max(1, int(round(max(0.0, maximum_s - 2 * context_s) * fps)))
+    minimum_frames = max(1, int(round(minimum_s * fps)))
+    positive_count = 0
+    bad_frame_event_count = 0
+    available_controls = 0
+    previous_episode_index = -1
+    current_episode_index: Optional[int] = None
+    current_events: List[Dict[str, Any]] = []
+    episodes_with_events: set[int] = set()
 
-    for episode_index in sorted(events_by_episode):
+    def add_controls(
+        episode_index: int,
+        length: int,
+        occupied: Iterable[Tuple[int, int]],
+    ) -> None:
+        nonlocal available_controls
+        cursor = 0
+        gaps: List[Tuple[int, int]] = []
+        for start, end in _merge_intervals(occupied):
+            if start - cursor >= minimum_frames:
+                gaps.append((cursor, start))
+            cursor = max(cursor, end)
+        if length - cursor >= minimum_frames:
+            gaps.append((cursor, length))
+        for gap_start, gap_end in gaps:
+            for start in range(gap_start, gap_end - minimum_frames + 1, minimum_frames):
+                end = start + minimum_frames
+                control_sampler.add({
+                    "episode_index": episode_index,
+                    "start_frame": start,
+                    "end_frame": end,
+                    "event_frames": [],
+                    "event_codes": [],
+                    "candidate_tasks": model_tasks,
+                    "selection_source": "deterministic_clean_gap_control",
+                    "priority": "normal",
+                })
+                available_controls += 1
+
+    def process_episode(episode_index: int, events: Sequence[Dict[str, Any]]) -> None:
+        nonlocal positive_count, bad_frame_event_count
+        if episode_index not in episode_results or episode_index not in route_rows:
+            return
         episode_result = episode_results[episode_index]
         length = int(episode_result["length"])
-        route = route_rows.get(episode_index)
-        if route is None:
-            continue
         by_frame: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
-        for event in events_by_episode[episode_index]:
-            by_frame[int(event["frame_index"])].append(event)
+        for event in events:
+            frame_index = int(event["frame_index"])
+            if 0 <= frame_index < length:
+                by_frame[frame_index].append(event)
+                bad_frame_event_count += 1
+        occupied: List[Tuple[int, int]] = []
         for cluster in _cluster_frames(
             list(by_frame),
             merge_gap_frames=merge_gap_frames,
@@ -204,7 +289,7 @@ def plan_qc_clips(
                     if task in model_tasks
                 }
             )
-            candidates.append({
+            positive_sampler.add({
                 "episode_index": episode_index,
                 "start_frame": start,
                 "end_frame": end,
@@ -214,52 +299,63 @@ def plan_qc_clips(
                 "selection_source": "deterministic_bad_frame",
                 "priority": "high" if any(event.get("severity") == "error" for event in cluster_events) else "medium",
             })
-            occupied[episode_index].append((start, end))
+            positive_count += 1
+            occupied.append((start, end))
+        add_controls(episode_index, length, occupied)
 
-    positive_count = len(candidates)
-    control_target = max(
-        minimum_control_clips,
-        int(round(positive_count * control_ratio)),
-    )
-    rng = np.random.default_rng(seed)
-    episode_ids = sorted(episode_results)
-    attempts = 0
-    maximum_control_attempts = max(100, control_target * 50)
-    minimum_frames = max(1, int(round(minimum_s * fps)))
-    requested_controls = control_target
-    while control_target > 0 and episode_ids and attempts < maximum_control_attempts:
-        attempts += 1
-        episode_index = int(rng.choice(episode_ids))
-        length = int(episode_results[episode_index]["length"])
-        if length < minimum_frames or episode_index not in route_rows:
-            continue
-        start = int(rng.integers(0, max(1, length - minimum_frames + 1)))
-        end = min(length, start + minimum_frames)
-        if _overlaps(start, end, occupied[episode_index]):
-            continue
-        candidates.append({
-            "episode_index": episode_index,
-            "start_frame": start,
-            "end_frame": end,
-            "event_frames": [],
-            "event_codes": [],
-            "candidate_tasks": model_tasks,
-            "selection_source": "random_control_unlabeled",
-            "priority": "normal",
-        })
-        occupied[episode_index].append((start, end))
-        control_target -= 1
+    for event in _iter_jsonl(quality_root / "bad_frames.jsonl"):
+        episode_index = int(event["episode_index"])
+        if episode_index < previous_episode_index:
+            raise ValueError("bad_frames.jsonl 必须按 episode_index 非递减排序以支持流式选片")
+        previous_episode_index = episode_index
+        if current_episode_index is None:
+            current_episode_index = episode_index
+        if episode_index != current_episode_index:
+            process_episode(current_episode_index, current_events)
+            episodes_with_events.add(current_episode_index)
+            current_episode_index = episode_index
+            current_events = []
+        current_events.append(event)
+    if current_episode_index is not None:
+        process_episode(current_episode_index, current_events)
+        episodes_with_events.add(current_episode_index)
+
+    for episode_index, episode_result in episode_results.items():
+        if episode_index not in episodes_with_events and episode_index in route_rows:
+            add_controls(episode_index, int(episode_result["length"]), ())
+
+    positive_rows = positive_sampler.rows()
+    control_rows = control_sampler.rows()
+    if bounded_limit is None:
+        requested_controls = max(
+            minimum_control_clips,
+            int(round(positive_count * control_ratio)),
+        )
+        candidates = positive_rows + control_rows[:requested_controls]
+    else:
+        requested_controls = min(
+            bounded_limit,
+            max(
+                minimum_control_clips,
+                int(round(bounded_limit * control_ratio / (1.0 + control_ratio)))
+                if control_ratio else 0,
+            ),
+        )
+        positive_target = min(len(positive_rows), bounded_limit - requested_controls)
+        control_target = min(len(control_rows), requested_controls)
+        remaining = bounded_limit - positive_target - control_target
+        if remaining > 0:
+            extra_positive = min(len(positive_rows) - positive_target, remaining)
+            positive_target += extra_positive
+            remaining -= extra_positive
+        if remaining > 0:
+            control_target += min(len(control_rows) - control_target, remaining)
+        candidates = positive_rows[:positive_target] + control_rows[:control_target]
 
     priority_order = {"high": 0, "medium": 1, "normal": 2}
-    candidates.sort(
-        key=lambda row: (
-            priority_order[row["priority"]],
-            row["episode_index"],
-            row["start_frame"],
-        )
-    )
-    if maximum_clips is not None:
-        candidates = candidates[: max(0, int(maximum_clips))]
+    candidates.sort(key=lambda row: (
+        priority_order[row["priority"]], row["episode_index"], row["start_frame"]
+    ))
 
     clip_rows = []
     api_rows = []
@@ -285,14 +381,20 @@ def plan_qc_clips(
             candidate["end_frame"],
             candidate["selection_source"],
         )
+        resolved_source_dataset = source_dataset or dataset.name
+        resolved_source_class = source_class or (
+            "supplier_dataset" if supplier_id else "public_dataset"
+        )
+        split_group = _source_group(resolved_source_dataset, str(video_path))
         clip = {
             "schema_version": SCHEMA_VERSION,
             "clip_id": clip_id,
             "video_id": clip_id,
             "parent_episode_index": episode_index,
             "tasks": route.get("tasks") or [],
+            "source_class": resolved_source_class,
             "source_uri": str(video_path),
-            "source_dataset": source_dataset or dataset.name,
+            "source_dataset": resolved_source_dataset,
             "supplier_id": supplier_id,
             # This describes the underlying aggregated MP4 timeline, not the
             # episode-local duration.  It prevents a valid later episode clip
@@ -311,7 +413,7 @@ def plan_qc_clips(
                 "candidate": True,
                 "training_ready": False,
                 "split": "unassigned_until_identity_metadata",
-                "split_group": clip_id,
+                "split_group": split_group,
                 "allowed_objectives": ["video_representation"],
                 "loss_masks": {
                     "video_representation": 1,
@@ -340,7 +442,7 @@ def plan_qc_clips(
         # Numeric/schema-only failures do not need a visual teacher.  Keep
         # their clip as review evidence, but do not spend API tokens on it.
         trigger_tasks = list(candidate["candidate_tasks"])
-        if not trigger_tasks and candidate["selection_source"] != "random_control_unlabeled":
+        if not trigger_tasks and candidate["selection_source"] != "deterministic_clean_gap_control":
             continue
         # Once a clip reaches the visual teacher, ask for a broad assessment.
         # Trigger tasks explain why it was recalled; they must not constrain
@@ -351,6 +453,16 @@ def plan_qc_clips(
             "schema_version": "egoqc-visual-teacher-request-v1",
             "prompt_version": "egoqc-visual-teacher-v3-open-world",
             "source_uri": str(video_path),
+            "raw_source_uri": str(video_path),
+            "source_class": resolved_source_class,
+            "source_dataset": resolved_source_dataset,
+            "supplier_id": supplier_id,
+            "parent_episode_index": episode_index,
+            "tasks": route.get("tasks") or [],
+            "duration_s": clip["duration_s"],
+            "split_group": split_group,
+            "split_group_source": "raw_source_uri",
+            "leakage_risk": "low",
             "clip_start_s": source_start_s,
             "clip_end_s": source_end_s,
             "candidate_tasks": teacher_tasks,
@@ -396,12 +508,17 @@ def plan_qc_clips(
         "dataset": str(dataset),
         "quality_root": str(quality_root),
         "fps": fps,
-        "bad_frame_events": sum(len(values) for values in events_by_episode.values()),
+        "bad_frame_events": bad_frame_event_count,
         "positive_candidates_before_limit": positive_count,
         "clips": len(clip_rows),
         "teacher_api_requests": len(api_rows),
         "requested_random_controls": requested_controls,
-        "produced_random_controls": requested_controls - control_target,
+        "available_clean_gap_controls": available_controls,
+        "produced_random_controls": sum(
+            row["selection_source"] == "deterministic_clean_gap_control"
+            for row in clip_rows
+        ),
+        "bounded_streaming_selection": bounded_limit is not None,
         "selection_counts": dict(
             sorted(
                 (key, sum(row["selection_source"] == key for row in clip_rows))
