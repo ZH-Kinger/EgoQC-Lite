@@ -21,6 +21,7 @@ from .ops import doctor, self_test
 from .dashboard import write_registry_dashboard
 from .estimate import estimate_manifest
 from .tuner import write_tuner
+from .experiment_evidence import build_experiment_evidence
 from .decisions import create_retry_plan
 from .repair import write_repair_preview
 from .adapters import inspect_adapter
@@ -712,6 +713,21 @@ def main() -> None:
     tune.add_argument("--quality-root", type=Path, required=True, nargs="+")
     tune.add_argument("--config", type=Path, default=default_config)
     tune.add_argument("--output", type=Path, required=True)
+    experiment = sub.add_parser(
+        "build-experiment-evidence",
+        help="生成可审计的 raw/MANO 错误与对照图片、视频和实验 manifest",
+    )
+    experiment.add_argument("--events", type=Path, required=True)
+    experiment.add_argument("--output", type=Path, required=True)
+    experiment.add_argument("--experiment-id", required=True)
+    experiment.add_argument("--code-root", type=Path)
+    experiment.add_argument("--config", type=Path)
+    experiment.add_argument("--run-results", type=Path)
+    experiment.add_argument("--maximum-rule-positive", type=int, default=12)
+    experiment.add_argument("--maximum-clean-control", type=int, default=6)
+    experiment.add_argument("--maximum-low-event-control", type=int, default=6)
+    experiment.add_argument("--workers", type=int, default=4)
+    experiment.add_argument("--seed", type=int, default=43)
     retry_plan = sub.add_parser("plan-retry", help="汇总失败 shard，生成去重重试计划")
     retry_plan.add_argument("--quality-root", type=Path, required=True, nargs="+")
     retry_plan.add_argument("--output", type=Path, required=True)
@@ -1340,6 +1356,21 @@ def main() -> None:
             [path.expanduser() for path in args.quality_root],
             load_config(args.config.expanduser()),
             args.output.expanduser(),
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-experiment-evidence":
+        summary = build_experiment_evidence(
+            args.events,
+            args.output,
+            experiment_id=args.experiment_id,
+            code_root=args.code_root,
+            config_path=args.config,
+            run_results_path=args.run_results,
+            maximum_rule_positive=args.maximum_rule_positive,
+            maximum_clean_control=args.maximum_clean_control,
+            maximum_low_event_control=args.maximum_low_event_control,
+            workers=args.workers,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-retry":
