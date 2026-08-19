@@ -69,6 +69,17 @@ class VLADatasetTests(unittest.TestCase):
             )[0]
             self.assertAlmostEqual(fixed_sample["clip_start_s"], 0.1)
 
+            row["vla_pretraining"]["synthetic_augmentation"] = {
+                "kind": "freeze_segment",
+                "start_fraction": 0.0,
+                "duration_fraction": 1.0,
+                "seed": 1,
+            }
+            manifest.write_text(json.dumps(row) + "\n")
+            frozen = VLAPretrainDataset(manifest, allow_technical_candidates=True)[0]
+            self.assertTrue((frozen["frames"] == frozen["frames"][0]).all())
+            row["vla_pretraining"].pop("synthetic_augmentation")
+
             shard = Path(temporary) / "shard.tar"
             with tarfile.open(shard, "w") as archive:
                 archive.add(video, arcname="nested/sample-1.mp4")

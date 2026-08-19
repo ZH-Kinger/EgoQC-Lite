@@ -42,6 +42,7 @@ from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .teacher_training_pool import build_teacher_training_pool
+from .synthetic_qc import build_synthetic_qc_training
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
@@ -237,6 +238,14 @@ def main() -> None:
     teacher_pool.add_argument("--output", type=Path, required=True)
     teacher_pool.add_argument("--minimum-overall-confidence", type=float, default=0.85)
     teacher_pool.add_argument("--minimum-task-confidence", type=float, default=0.70)
+    synthetic_qc = sub.add_parser(
+        "build-synthetic-qc-training",
+        help="从高置信干净 clip 构建只用于训练的在线受控异常增强",
+    )
+    synthetic_qc.add_argument("--manifest", type=Path, required=True)
+    synthetic_qc.add_argument("--output", type=Path, required=True)
+    synthetic_qc.add_argument("--maximum-per-task", type=int, default=400)
+    synthetic_qc.add_argument("--seed", type=int, default=31)
     distill_audit = sub.add_parser(
         "audit-qc-training",
         help="检查 Gold Set 覆盖、分组切分、跨 split 泄漏和训练治理状态",
@@ -749,6 +758,14 @@ def main() -> None:
             args.output,
             minimum_overall_confidence=args.minimum_overall_confidence,
             minimum_task_confidence=args.minimum_task_confidence,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-synthetic-qc-training":
+        summary = build_synthetic_qc_training(
+            args.manifest,
+            args.output,
+            maximum_per_task=args.maximum_per_task,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "smoke-qc-student":
