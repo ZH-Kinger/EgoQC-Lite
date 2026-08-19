@@ -19,6 +19,11 @@ person/session 聚类置信区间和供应商 worst-group。协议见
 [`docs/ieee-experiment-protocol.md`](docs/ieee-experiment-protocol.md)，命令为
 `egoqc evaluate-qc-research`。
 
+IE-QC Phase A 已提供只读的可控标注干预和 evidence-delta 实验闭环。它在内存中重放
+timestamp、wrist、camera、MANO pose/mask/shape 等七类错误，不复制或覆盖原始 Parquet，
+并明确禁止用合成结果改变验收结论。设计、命令和真实 Gold 停止条件见
+[`docs/ie-qc-phase-a.md`](docs/ie-qc-phase-a.md)。
+
 自动候选 clip 选择与开放世界教师审查见 `docs/qc-auto-clip-selection.md`；各层训练数据的
 起步量、用途和隔离要求见 `docs/qc-model-data-plan.md`。视觉教师只读取规则召回的 4–8 秒
 片段和少量未标注随机对照，不扫描全量视频。

@@ -44,6 +44,7 @@ from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .teacher_training_pool import build_teacher_training_pool
 from .synthetic_qc import build_synthetic_qc_training
+from .interventions import plan_qc_interventions, run_qc_interventions
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
 from .egodex_overlay import render_egodex_overlay
 from .egodex_batch import build_egodex_training_candidates
@@ -268,6 +269,34 @@ def main() -> None:
     synthetic_qc.add_argument("--output", type=Path, required=True)
     synthetic_qc.add_argument("--maximum-per-task", type=int, default=400)
     synthetic_qc.add_argument("--seed", type=int, default=31)
+    intervention_plan = sub.add_parser(
+        "plan-qc-interventions",
+        help="为 Phase A 生成不复制、不覆盖源数据的可控干预虚拟视图",
+    )
+    intervention_plan.add_argument("dataset", type=Path)
+    intervention_plan.add_argument("--output", type=Path, required=True)
+    intervention_plan.add_argument(
+        "--intervention-config",
+        type=Path,
+        default=Path("config/qc_interventions_phase_a.json"),
+    )
+    intervention_plan.add_argument(
+        "--episode", type=int, action="append", dest="episodes"
+    )
+    intervention_plan.add_argument(
+        "--family", action="append", dest="families"
+    )
+    intervention_plan.add_argument("--maximum-episodes", type=int, default=32)
+    intervention_plan.add_argument("--seed", type=int, default=20260819)
+    intervention_run = sub.add_parser(
+        "run-qc-interventions",
+        help="重放虚拟干预并记录规则/几何专家的前后 evidence delta",
+    )
+    intervention_run.add_argument("dataset", type=Path)
+    intervention_run.add_argument("--manifest", type=Path, required=True)
+    intervention_run.add_argument("--output", type=Path, required=True)
+    intervention_run.add_argument("--config", type=Path, default=default_config)
+    intervention_run.add_argument("--maximum-interventions", type=int)
     distill_audit = sub.add_parser(
         "audit-qc-training",
         help="检查 Gold Set 覆盖、分组切分、跨 split 泄漏和训练治理状态",
@@ -825,6 +854,26 @@ def main() -> None:
             args.output,
             maximum_per_task=args.maximum_per_task,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "plan-qc-interventions":
+        summary = plan_qc_interventions(
+            args.dataset,
+            args.intervention_config,
+            args.output,
+            episode_indices=args.episodes,
+            families=args.families,
+            maximum_episodes=args.maximum_episodes,
+            seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "run-qc-interventions":
+        summary = run_qc_interventions(
+            args.dataset,
+            args.manifest,
+            args.config,
+            args.output,
+            maximum_interventions=args.maximum_interventions,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "smoke-qc-student":

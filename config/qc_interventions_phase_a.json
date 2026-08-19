@@ -1,0 +1,110 @@
+{
+  "schema_version": "egoqc-intervention-config-v1",
+  "description": "Phase A controlled annotation-channel interventions. Synthetic labels are research-only and never authorize acceptance or rejection.",
+  "interval": {
+    "start_fraction": 0.25,
+    "end_fraction": 0.75,
+    "minimum_frames": 3
+  },
+  "families": {
+    "timestamp_offset": {
+      "enabled": true,
+      "modality": "timing",
+      "expected_experts": [
+        "issue:timestamp_mismatch",
+        "issue:numeric_frame_interval_jitter",
+        "metric:timestamp_max_error_s",
+        "metric:label_nominal_alignment_error_max_ms"
+      ],
+      "levels": {
+        "low": {"offset_s": 0.006},
+        "high": {"offset_s": 0.025}
+      }
+    },
+    "wrist_position_offset": {
+      "enabled": true,
+      "modality": "hand_state",
+      "expected_experts": [
+        "issue:world_camera_position_mismatch",
+        "metric:left_position_error_p95_m",
+        "metric:right_position_error_p95_m"
+      ],
+      "levels": {
+        "low": {"offset_m": [0.03, 0.0, 0.0]},
+        "high": {"offset_m": [0.10, 0.0, 0.0]}
+      }
+    },
+    "camera_translation_spike": {
+      "enabled": true,
+      "modality": "camera_pose",
+      "expected_experts": [
+        "issue:camera_jitter",
+        "issue:world_camera_position_mismatch",
+        "metric:camera_translation_jitter_p99_mm"
+      ],
+      "levels": {
+        "low": {"offset_m": [0.03, 0.0, 0.0]},
+        "high": {"offset_m": [0.10, 0.0, 0.0]}
+      }
+    },
+    "pose_representation_offset": {
+      "enabled": true,
+      "modality": "mano_pose",
+      "expected_experts": [
+        "issue:pose_representation_mismatch",
+        "metric:left_pose_repr_error_p95_deg",
+        "metric:right_pose_repr_error_p95_deg"
+      ],
+      "levels": {
+        "low": {"offset_deg": 4.0},
+        "high": {"offset_deg": 25.0}
+      }
+    },
+    "state_mask_dropout": {
+      "enabled": true,
+      "modality": "visibility",
+      "expected_experts": [
+        "issue:kept_mask_mismatch",
+        "issue:mask_flicker",
+        "metric:kept_mask_mismatch_count"
+      ],
+      "levels": {
+        "low": {"sides": ["left"]},
+        "high": {"sides": ["left", "right"]}
+      }
+    },
+    "world_translation_scale": {
+      "enabled": true,
+      "modality": "world_hand_pose",
+      "expected_experts": [
+        "issue:world_camera_position_mismatch",
+        "metric:left_position_error_p95_m",
+        "metric:right_position_error_p95_m"
+      ],
+      "levels": {
+        "low": {"scale": 1.03},
+        "high": {"scale": 1.15}
+      }
+    },
+    "beta_drift": {
+      "enabled": true,
+      "modality": "mano_shape",
+      "expected_experts": [
+        "issue:beta_drift",
+        "metric:left_beta_max_std",
+        "metric:right_beta_max_std"
+      ],
+      "levels": {
+        "low": {"maximum_delta": 0.10},
+        "high": {"maximum_delta": 0.30}
+      }
+    }
+  },
+  "governance": {
+    "raw_source_readonly": true,
+    "lazy_virtual_views": true,
+    "synthetic_is_not_gold": true,
+    "may_change_acceptance": false,
+    "allowed_splits": ["train", "calibration"]
+  }
+}

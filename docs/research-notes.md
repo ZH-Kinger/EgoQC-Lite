@@ -1,5 +1,9 @@
 # Research notes and implementation choices
 
+投稿前完整方法调研、相关工作矩阵、新颖性审计与证伪条件见
+[`ieee-method-research-review.md`](ieee-method-research-review.md)。该文档优先于本页较早的
+MVP 研究备注；任何论文主张都必须先通过其中定义的 Phase A 小规模证据实验。
+
 ## Direct precedents
 
 ### DROID

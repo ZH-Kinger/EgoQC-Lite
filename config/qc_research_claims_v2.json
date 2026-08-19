@@ -1,0 +1,124 @@
+{
+  "schema_version": "egoqc-research-claims-v2",
+  "status": "pre_registered_hypotheses_not_results",
+  "method_name": "Interventional Evidence QC",
+  "method_short_name": "IE-QC",
+  "research_question": "Can controlled annotation-channel interventions identify context-dependent evidence reliability and improve open-world temporal QC under risk and compute constraints?",
+  "scope": {
+    "primary": "egocentric embodied-data annotation integrity and temporal visual quality",
+    "not_primary": [
+      "storage architecture",
+      "web review UI",
+      "generic use-case routing",
+      "semantic deduplication",
+      "robot data valuation",
+      "automatic source mutation"
+    ]
+  },
+  "method_components": [
+    "interventional_reliability_learning",
+    "availability_aware_temporal_evidence_graph",
+    "open_set_defect_head",
+    "risk_bounded_sequential_evidence_acquisition"
+  ],
+  "initial_error_families": [
+    "video_annotation_time_shift",
+    "hand_pose_or_wrist_freeze",
+    "camera_hand_trajectory_inconsistency",
+    "coordinate_unit_or_handedness_error",
+    "mano_visual_overlay_drift",
+    "visibility_occlusion_or_out_of_view",
+    "unknown_defect"
+  ],
+  "hypotheses": [
+    {
+      "id": "H1",
+      "claim": "Interventional supervision improves real held-out defect detection beyond synthetic augmentation and non-interventional weak-label fusion.",
+      "primary_endpoint": "recall_at_validation_selected_statistically_supported_precision",
+      "required_comparators": [
+        "gold_only_student",
+        "gold_plus_synthetic_augmentation",
+        "snorkel_style_label_model",
+        "out_of_fold_stacking"
+      ],
+      "required_test": "unseen_supplier_or_camera_human_gold",
+      "falsified_if": "gain_is_confined_to_synthetic_test_or_external_test_cluster_bootstrap_interval_does_not_support_improvement"
+    },
+    {
+      "id": "H2",
+      "claim": "Availability-aware segment modeling improves temporal defect localization beyond frame-wise and ordinary temporal baselines.",
+      "primary_endpoint": "interval_average_precision_and_boundary_f1",
+      "required_comparators": [
+        "frame_mlp",
+        "bigru",
+        "temporal_transformer",
+        "ordinary_crf"
+      ],
+      "falsified_if": "episode_classification_improves_without_supported_interval_localization_gain"
+    },
+    {
+      "id": "H3",
+      "claim": "The open-set branch detects held-out real defect families better than confidence-only baselines.",
+      "primary_endpoint": "open_set_auprc_and_fpr95",
+      "required_comparators": [
+        "max_softmax",
+        "energy_score",
+        "deep_ensemble_disagreement",
+        "openvad_style_baseline"
+      ],
+      "required_test": "leave_one_defect_family_out_plus_real_unknown_gold",
+      "falsified_if": "no_supported_gain_over_best_open_set_baseline"
+    },
+    {
+      "id": "H4",
+      "claim": "Sequential evidence acquisition reduces compute and API cost at matched selective risk.",
+      "primary_endpoint": "cost_at_matched_risk_and_coverage",
+      "required_comparators": [
+        "all_experts",
+        "fixed_cascade",
+        "single_confidence_threshold_cascade",
+        "agreement_based_cascade"
+      ],
+      "falsified_if": "router_does_not_reduce_cost_beyond_simple_cascade_at_matched_risk"
+    },
+    {
+      "id": "H5",
+      "claim": "IE-QC filtering or interval weighting improves downstream robot policy learning at fixed data and compute budgets.",
+      "primary_endpoint": "robot_or_simulator_task_success_rate",
+      "required_comparators": [
+        "raw_data",
+        "deterministic_rule_gate",
+        "random_equal_size_removal",
+        "ie_qc_hard_filter",
+        "ie_qc_interval_weighting"
+      ],
+      "falsified_if": "qc_metrics_improve_without_supported_downstream_policy_gain"
+    }
+  ],
+  "data_contract": {
+    "training_labels": ["human_gold", "teacher_silver", "programmatic_weak", "controlled_intervention"],
+    "validation_truth": "human_gold_only",
+    "test_truth": "locked_human_gold_only",
+    "external_test": "at_least_one_unseen_supplier_or_camera",
+    "open_set_split": "leave_complete_defect_family_out",
+    "group_isolation": ["supplier", "person", "operator", "session", "source_video"],
+    "source_data_mutable": false
+  },
+  "required_reporting": [
+    "per_defect_metrics",
+    "worst_group_metrics",
+    "wilson_precision_interval",
+    "cluster_bootstrap_interval",
+    "calibration_metrics",
+    "risk_coverage_curve",
+    "interval_localization_metrics",
+    "open_set_metrics",
+    "video_hours_per_gpu_hour",
+    "api_and_human_review_cost",
+    "all_random_seeds_and_failed_runs"
+  ],
+  "phase_a_exit_gate": {
+    "proceed": "intervention_response_predicts_real_gold_expert_correctness_across_multiple_sources",
+    "stop": "relationship_is_unstable_or_confined_to_synthetic_examples"
+  }
+}
