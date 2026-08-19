@@ -91,6 +91,23 @@ def _fake_urlopen(captured):
 
 
 class TeacherApiTests(unittest.TestCase):
+    def test_supplier_queue_requires_explicit_external_transfer_authorization(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            queue = root / "queue.jsonl"
+            row = _queue_row(Path("/video.mp4"), root / "teacher-label.json")
+            row["source_class"] = "supplier_dataset"
+            row["source_dataset"] = "supplier-batch-a"
+            queue.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "供应商数据"):
+                run_teacher_api(
+                    queue,
+                    root / "run",
+                    base_url="https://teacher.example/v1",
+                    model="teacher",
+                )
+
     def test_bailian_preset_uses_video_frame_array_and_dashscope_key(self):
         request = _queue_row(Path("/video.mp4"), Path("/teacher-label.json"))
         request["task_context"] = {"task": "add/remove lids"}

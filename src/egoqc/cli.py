@@ -43,6 +43,7 @@ from .research_evaluation import evaluate_qc_research_protocol
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
+from .teacher_queue import merge_teacher_queues
 from .teacher_training_pool import build_teacher_training_pool
 from .synthetic_qc import build_synthetic_qc_training
 from .interventions import plan_qc_interventions, run_qc_interventions
@@ -382,6 +383,14 @@ def main() -> None:
     )
     clip_plan.add_argument("--source-dataset")
     clip_plan.add_argument("--supplier-id")
+    queue_merge = sub.add_parser(
+        "merge-teacher-queues",
+        help="按数据源和召回类型轮转合并、去重视觉教师队列",
+    )
+    queue_merge.add_argument("queues", type=Path, nargs="+")
+    queue_merge.add_argument("--output", type=Path, required=True)
+    queue_merge.add_argument("--maximum-requests", type=int)
+    queue_merge.add_argument("--seed", type=int, default=17)
     adapter_clip_plan = sub.add_parser(
         "plan-adapter-clips",
         help="从 EgoDex 等只读 adapter 样本生成低成本视觉教师队列",
@@ -503,6 +512,11 @@ def main() -> None:
     teacher_run.add_argument("--timeout-s", type=float, default=120.0)
     teacher_run.add_argument("--max-retries", type=int, default=3)
     teacher_run.add_argument("--max-requests", type=int)
+    teacher_run.add_argument(
+        "--allow-external-supplier-data",
+        action="store_true",
+        help="明确授权将供应商视频的抽样帧发送给外部教师 API",
+    )
     teacher_run.add_argument("--input-price-per-million", type=float)
     teacher_run.add_argument("--output-price-per-million", type=float)
     undistort_plan = sub.add_parser(
@@ -991,8 +1005,17 @@ def main() -> None:
             timeout_s=args.timeout_s,
             max_retries=args.max_retries,
             max_requests=args.max_requests,
+            allow_external_supplier_data=args.allow_external_supplier_data,
             input_price_per_million=args.input_price_per_million,
             output_price_per_million=args.output_price_per_million,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "merge-teacher-queues":
+        summary = merge_teacher_queues(
+            args.queues,
+            args.output,
+            maximum_requests=args.maximum_requests,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-adapter-clips":

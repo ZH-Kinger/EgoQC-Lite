@@ -496,6 +496,7 @@ def run_teacher_api(
     timeout_s: float = 120.0,
     max_retries: int = 3,
     max_requests: Optional[int] = None,
+    allow_external_supplier_data: bool = False,
     input_price_per_million: Optional[float] = None,
     output_price_per_million: Optional[float] = None,
 ) -> Dict[str, Any]:
@@ -513,6 +514,17 @@ def run_teacher_api(
     requests = _read_jsonl(queue.expanduser().resolve())
     if max_requests is not None:
         requests = requests[: max(0, int(max_requests))]
+    supplier_sources = sorted({
+        str(request.get("source_dataset") or "unknown_dataset")
+        for request in requests
+        if request.get("source_class") == "supplier_dataset"
+    })
+    if supplier_sources and not dry_run and not allow_external_supplier_data:
+        raise ValueError(
+            "队列包含供应商数据，会将抽样帧发送给外部教师 API；"
+            "经明确授权后传入 allow_external_supplier_data=True。"
+            f" sources={supplier_sources}"
+        )
     request_ids = [str(request.get("request_id")) for request in requests]
     if len(set(request_ids)) != len(request_ids):
         raise ValueError("教师队列存在重复 request_id，拒绝重复计费")
@@ -603,6 +615,10 @@ def run_teacher_api(
         "dry_run": dry_run,
         "cost_profile": cost_profile,
         "credentials_stored": False,
+        "external_supplier_data_authorized": bool(
+            supplier_sources and allow_external_supplier_data
+        ),
+        "supplier_sources": supplier_sources,
         "media_mode": media_mode,
         "sample_fps": sample_fps,
         "max_frames": max_frames,
