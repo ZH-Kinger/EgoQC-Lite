@@ -27,6 +27,8 @@ def _annotated_uri(root: Optional[Path], episode: int) -> Optional[str]:
     if root is None:
         return None
     candidates = [
+        root / f"episode-{episode:06d}-annotated.mp4",
+        root / f"episode-{episode:06d}" / "annotated.mp4",
         root / f"episode-{episode:06d}-repaired-annotated.mp4",
         root / f"episode-{episode:06d}" / "repaired-annotated.mp4",
     ]
