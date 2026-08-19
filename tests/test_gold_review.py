@@ -36,7 +36,9 @@ def test_phase_a_gold_review_materializes_exact_readonly_episode(tmp_path: Path)
                 "length": 12,
                 "tasks": ["fixture task"],
                 "tier": "bronze",
-                "issue_codes": ["position_jitter", "temporal_spike"],
+                "issue_codes": [
+                    "bad_frame_ratio_exceeded", "position_jitter", "temporal_spike"
+                ],
                 "bad_frames": [
                     {"frame_index": 4, "code": "temporal_spike", "side": "left"}
                 ],
@@ -72,6 +74,7 @@ def test_phase_a_gold_review_materializes_exact_readonly_episode(tmp_path: Path)
     assert event["synthetic"] is False
     assert event["raw_source_readonly"] is True
     assert event["issue_codes"] == ["position_jitter", "temporal_spike"]
+    assert event["aggregate_issue_codes"] == ["bad_frame_ratio_exceeded"]
     assert event["mano_overlay_available"] is True
 
 

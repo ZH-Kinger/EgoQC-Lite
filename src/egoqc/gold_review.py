@@ -14,6 +14,7 @@ from .validator import load_episode_index
 
 
 SCHEMA_VERSION = "egoqc-phase-a-gold-review-v1"
+AGGREGATE_ISSUES = {"bad_frame_ratio_exceeded"}
 
 
 ISSUE_LABELS = {
@@ -263,7 +264,11 @@ def build_phase_a_review_events(
                 annotated_clip = candidate
                 annotated_clips += 1
 
-        issue_codes = [str(code) for code in baseline.get("issue_codes", [])]
+        all_issue_codes = [str(code) for code in baseline.get("issue_codes", [])]
+        issue_codes = [code for code in all_issue_codes if code not in AGGREGATE_ISSUES]
+        aggregate_issue_codes = [
+            code for code in all_issue_codes if code in AGGREGATE_ISSUES
+        ]
         duration = length / fps
         dataset_id = str(baseline.get("dataset_id") or dataset.name)
         task = "；".join(str(value) for value in baseline.get("tasks", []) if value)
@@ -275,6 +280,7 @@ def build_phase_a_review_events(
             "baseline_tier": baseline.get("tier"),
             "issue_codes": issue_codes,
             "issue_labels": _issue_labels(issue_codes),
+            "aggregate_issue_codes": aggregate_issue_codes,
             "rule_evidence": baseline.get("evidence") or {},
             "bad_frames": baseline.get("bad_frames") or [],
             "sample_frames": baseline.get("sample_frames") or [],
