@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS review_events (
     claimed_at timestamptz,
     lease_expires_at timestamptz,
     decision text CHECK (decision IS NULL OR decision IN ('confirmed', 'false_positive', 'unsure')),
+    decision_details jsonb NOT NULL DEFAULT '{}'::jsonb,
     note text NOT NULL DEFAULT '',
     reviewed_by text,
     reviewed_at timestamptz,
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS review_decisions (
     event_id text NOT NULL REFERENCES review_events(event_id),
     reviewer text NOT NULL,
     decision text NOT NULL CHECK (decision IN ('confirmed', 'false_positive', 'unsure')),
+    details jsonb NOT NULL DEFAULT '{}'::jsonb,
     note text NOT NULL DEFAULT '',
     event_version integer NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
@@ -112,6 +114,8 @@ CREATE INDEX IF NOT EXISTS review_video_assignments_user_idx
     ON review_video_assignments(primary_user_id, run_id);
 ALTER TABLE review_events ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'unclassified';
 ALTER TABLE review_events ADD COLUMN IF NOT EXISTS severity text NOT NULL DEFAULT 'review';
+ALTER TABLE review_events ADD COLUMN IF NOT EXISTS decision_details jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE review_decisions ADD COLUMN IF NOT EXISTS details jsonb NOT NULL DEFAULT '{}'::jsonb;
 UPDATE review_events SET category='hand_visibility', severity='reject'
     WHERE kind='hand_absent' AND category='unclassified';
 UPDATE review_events SET category='multi_person', severity='reject'
@@ -252,7 +256,7 @@ class ReviewStore:
         query = f"""SELECT e.event_id, e.video_id, e.kind, e.category, e.severity,
                     e.start_s, e.end_s, e.duration_s, e.clip_path, e.source_uri,
                     e.priority, e.metrics, e.state, e.claimed_by, e.lease_expires_at,
-                    e.decision, e.note, e.reviewed_by, e.reviewed_at, e.version,
+                    e.decision, e.decision_details, e.note, e.reviewed_by, e.reviewed_at, e.version,
                     e.updated_at, a.primary_user_id AS assigned_to
                     FROM review_events e
                     LEFT JOIN review_video_assignments a
@@ -338,6 +342,7 @@ class ReviewStore:
         decision: str,
         note: str = "",
         expected_version: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         reviewer = reviewer.strip()
         if not reviewer or len(reviewer) > 120:
@@ -346,6 +351,13 @@ class ReviewStore:
             raise ValueError("备注不能超过 10000 字符")
         if decision not in {"confirmed", "false_positive", "unsure"}:
             raise ValueError("无效 decision")
+        if details is None:
+            details = {}
+        if not isinstance(details, dict):
+            raise ValueError("details 必须是 JSON object")
+        if len(json.dumps(details, ensure_ascii=False)) > 100000:
+            raise ValueError("details 不能超过 100000 字符")
+        _, _, Jsonb = _psycopg()
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM review_events WHERE event_id=%s FOR UPDATE", (event_id,)
@@ -361,16 +373,20 @@ class ReviewStore:
             next_version = int(row["version"]) + 1
             connection.execute(
                 """INSERT INTO review_decisions(
-                       decision_id, event_id, reviewer, decision, note, event_version)
-                   VALUES (%s,%s,%s,%s,%s,%s)""",
-                (uuid.uuid4(), event_id, reviewer, decision, note, next_version),
+                       decision_id, event_id, reviewer, decision, details, note, event_version)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                (
+                    uuid.uuid4(), event_id, reviewer, decision, Jsonb(details), note,
+                    next_version,
+                ),
             )
             updated = connection.execute(
-                """UPDATE review_events SET state='reviewed', decision=%s, note=%s,
+                """UPDATE review_events SET state='reviewed', decision=%s,
+                       decision_details=%s, note=%s,
                        reviewed_by=%s, reviewed_at=now(), claimed_by=NULL, claim_token=NULL,
                        claimed_at=NULL, lease_expires_at=NULL, version=%s, updated_at=now()
                    WHERE event_id=%s RETURNING *""",
-                (decision, note, reviewer, next_version, event_id),
+                (decision, Jsonb(details), note, reviewer, next_version, event_id),
             ).fetchone()
         return _event_json(updated) or {}
 

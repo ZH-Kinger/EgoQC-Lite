@@ -4,6 +4,10 @@ PostgreSQL 只保存异常事件、领取租约、人工结论和审计历史。
 只读，现有 SQLite Registry 继续负责扫描任务、worker lease 和处理进度。两者不要
 强行合库：跑批状态是单机/文件系统强相关状态，人工复检是跨机器共享状态。
 
+Phase A 的 episode Gold 任务和盲审顺序见
+[`gold-review-guide.md`](gold-review-guide.md)。同一个面板会先隐藏规则结论，只播放原视频；
+审核员锁定第一判断后，才显示 MANO 叠加和逐规则真/误报选项。
+
 ## 数据模型
 
 - `review_datasets`：逻辑数据集，不绑定某次挂载路径。

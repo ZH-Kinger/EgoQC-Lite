@@ -4,6 +4,12 @@ from typing import Any, Dict
 
 
 ERROR_TAXONOMY: Dict[str, Dict[str, str]] = {
+    "episode_qc_gold_review": {
+        "label": "Episode 多信号 Gold 复核",
+        "category": "human_gold",
+        "category_label": "人工 Gold",
+        "severity": "review",
+    },
     "hand_absent": {
         "label": "手连续离画",
         "category": "hand_visibility",
@@ -27,6 +33,42 @@ ERROR_TAXONOMY: Dict[str, Dict[str, str]] = {
         "category": "motion_quality",
         "category_label": "运动质量",
         "severity": "review",
+    },
+    "position_jitter": {
+        "label": "手腕位置抖动",
+        "category": "motion_quality",
+        "category_label": "运动质量",
+        "severity": "review",
+    },
+    "wrist_rotation_jitter": {
+        "label": "手腕旋转抖动",
+        "category": "motion_quality",
+        "category_label": "运动质量",
+        "severity": "review",
+    },
+    "joint_rotation_jitter": {
+        "label": "手指关节旋转抖动",
+        "category": "annotation_geometry",
+        "category_label": "标注与几何",
+        "severity": "review",
+    },
+    "temporal_spike": {
+        "label": "单帧轨迹跳点",
+        "category": "motion_quality",
+        "category_label": "运动质量",
+        "severity": "reject",
+    },
+    "instantaneous_velocity_outlier": {
+        "label": "瞬时速度异常",
+        "category": "motion_quality",
+        "category_label": "运动质量",
+        "severity": "review",
+    },
+    "bad_frame_ratio_exceeded": {
+        "label": "坏帧比例超标",
+        "category": "acceptance_aggregate",
+        "category_label": "验收聚合",
+        "severity": "reject",
     },
     "pose_freeze": {
         "label": "姿态异常冻结",

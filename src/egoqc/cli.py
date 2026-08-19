@@ -27,6 +27,7 @@ from .adapters import inspect_adapter
 from .live_server import serve_review
 from .review_db import ReviewStore, load_event_file
 from .review_pg_server import serve_postgres_review
+from .gold_review import build_phase_a_review_events
 from .hand_screen import screen_rekadaily_hands
 from .completion import plan_public_completion, build_completion_overlay
 from .training_views import build_rekadaily_training_views
@@ -539,6 +540,20 @@ def main() -> None:
     egodex_overlay.add_argument("--start-frame", type=int, default=0)
     egodex_overlay.add_argument("--max-frames", type=int, default=300)
     egodex_overlay.add_argument("--stride", type=int, default=1)
+    gold_review = sub.add_parser(
+        "build-phase-a-review-events",
+        help="把 Phase A 基线证据和派生视频接入 PostgreSQL Gold 复检面板",
+    )
+    gold_review.add_argument("dataset", type=Path)
+    gold_review.add_argument("--baseline-evidence", type=Path, required=True)
+    gold_review.add_argument("--output", type=Path, required=True)
+    gold_review.add_argument("--annotated-root", type=Path)
+    gold_review.add_argument("--video-key", default="observation.images.ego")
+    gold_review.add_argument(
+        "--no-materialize-media",
+        action="store_true",
+        help="只生成事件，不从聚合 MP4 派生 episode 短视频（仅调试）",
+    )
     serve = sub.add_parser("serve-review", help="启动可滚动更新的本地人工复检 Web 服务")
     serve.add_argument("--evidence-root", type=Path, required=True)
     serve.add_argument("--quality-root", type=Path, required=True)
@@ -1066,6 +1081,16 @@ def main() -> None:
         summary = render_egodex_overlay(
             args.dataset, args.episode, args.output,
             start_frame=args.start_frame, max_frames=args.max_frames, stride=args.stride,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-phase-a-review-events":
+        summary = build_phase_a_review_events(
+            args.dataset,
+            args.baseline_evidence,
+            args.output,
+            annotated_root=args.annotated_root,
+            video_key=args.video_key,
+            materialize_media=not args.no_materialize_media,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "serve-review":

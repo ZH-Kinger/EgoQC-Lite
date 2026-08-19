@@ -579,6 +579,7 @@ def run_qc_interventions(
                 "source_data_file": file_name,
                 "tier": baseline.tier,
                 "issue_codes": sorted({issue.code for issue in baseline.issues}),
+                "bad_frames": list(baseline.bad_frames),
                 "sample_frames": list(baseline.sample_frames),
                 "evidence": vector,
             })

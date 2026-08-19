@@ -47,10 +47,16 @@ class FakeStore:
         self.event.update(state="claimed", claimed_by=reviewer, version=2)
         return {**self.event, "claim_token": "token-1"}
 
-    def decide(self, event_id, reviewer, claim_token, decision, note="", expected_version=None):
+    def decide(
+        self, event_id, reviewer, claim_token, decision, note="", expected_version=None,
+        details=None,
+    ):
         if claim_token != "token-1" or reviewer != self.event["claimed_by"]:
             raise ReviewConflict("bad token")
-        self.event.update(state="reviewed", decision=decision, note=note, version=3)
+        self.event.update(
+            state="reviewed", decision=decision, decision_details=details or {},
+            note=note, version=3,
+        )
         return self.event.copy()
 
     def release(self, event_id, reviewer, claim_token):
@@ -140,9 +146,11 @@ def test_dynamic_review_api_claim_decide_and_range_media(review_server):
             "decision": "confirmed",
             "note": "visible issue",
             "expected_version": 2,
+            "details": {"confidence": "high"},
         },
     )
     assert decided["state"] == "reviewed"
+    assert decided["decision_details"]["confidence"] == "high"
     request = urllib.request.Request(
         base + "/api/review/media/video-1--hand_absent-00",
         headers={"Range": "bytes=2-5"},
