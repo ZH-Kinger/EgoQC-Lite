@@ -250,7 +250,7 @@ def plan_qc_clips(
                     "end_frame": end,
                     "event_frames": [],
                     "event_codes": [],
-                    "candidate_tasks": model_tasks,
+                    "candidate_tasks": [],
                     "selection_source": "deterministic_clean_gap_control",
                     "priority": "normal",
                 })
@@ -300,7 +300,7 @@ def plan_qc_clips(
             "end_frame": end,
             "event_frames": [],
             "event_codes": selected_codes,
-            "candidate_tasks": model_tasks,
+            "candidate_tasks": [],
             "selection_source": "deterministic_low_event_control",
             "priority": "normal",
             "control_event_frame_count": len(selected_frames),

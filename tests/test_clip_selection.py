@@ -177,6 +177,12 @@ class ClipSelectionTest(unittest.TestCase):
             self.assertEqual({row["supplier_id"] for row in queue}, {"vendor-a"})
             self.assertTrue(all(row["split_group_source"] == "raw_source_uri" for row in queue))
             self.assertEqual(len({row["request_id"] for row in queue}), len(queue))
+            controls = [
+                row for row in queue if row["selection_source"].endswith("_control")
+            ]
+            self.assertTrue(controls)
+            self.assertTrue(all(not row["trigger_tasks"] for row in controls))
+            self.assertTrue(all("mano_overlay_drift" in row["candidate_tasks"] for row in controls))
 
 
 if __name__ == "__main__":
