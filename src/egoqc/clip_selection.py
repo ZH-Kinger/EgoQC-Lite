@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from bisect import bisect_left
+
 import hashlib
 import heapq
 import json
@@ -218,6 +220,8 @@ def plan_qc_clips(
     positive_count = 0
     bad_frame_event_count = 0
     available_controls = 0
+    available_clean_gap_controls = 0
+    available_low_event_controls = 0
     previous_episode_index = -1
     current_episode_index: Optional[int] = None
     current_events: List[Dict[str, Any]] = []
@@ -228,7 +232,7 @@ def plan_qc_clips(
         length: int,
         occupied: Iterable[Tuple[int, int]],
     ) -> None:
-        nonlocal available_controls
+        nonlocal available_controls, available_clean_gap_controls
         cursor = 0
         gaps: List[Tuple[int, int]] = []
         for start, end in _merge_intervals(occupied):
@@ -251,6 +255,56 @@ def plan_qc_clips(
                     "priority": "normal",
                 })
                 available_controls += 1
+                available_clean_gap_controls += 1
+
+    def add_low_event_control(
+        episode_index: int,
+        length: int,
+        by_frame: Dict[int, List[Dict[str, Any]]],
+    ) -> None:
+        """Recall one rule-domain calibration window from a dense episode."""
+
+        nonlocal available_controls, available_low_event_controls
+        if not by_frame or length < minimum_frames:
+            return
+        event_frames = sorted(by_frame)
+        starts = list(range(0, length - minimum_frames + 1, minimum_frames))
+        tail_start = length - minimum_frames
+        if not starts or starts[-1] != tail_start:
+            starts.append(tail_start)
+
+        def window_rank(start: int) -> Tuple[int, str]:
+            left = bisect_left(event_frames, start)
+            right = bisect_left(event_frames, start + minimum_frames)
+            tie_break = hashlib.sha256(
+                f"{seed}:low-event:{episode_index}:{start}".encode("utf-8")
+            ).hexdigest()
+            return right - left, tie_break
+
+        start = min(starts, key=window_rank)
+        end = start + minimum_frames
+        left = bisect_left(event_frames, start)
+        right = bisect_left(event_frames, end)
+        selected_frames = event_frames[left:right]
+        selected_codes = sorted({
+            str(event["code"])
+            for frame in selected_frames
+            for event in by_frame[frame]
+        })
+        control_sampler.add({
+            "episode_index": episode_index,
+            "start_frame": start,
+            "end_frame": end,
+            "event_frames": [],
+            "event_codes": selected_codes,
+            "candidate_tasks": model_tasks,
+            "selection_source": "deterministic_low_event_control",
+            "priority": "normal",
+            "control_event_frame_count": len(selected_frames),
+            "control_event_frame_ratio": len(selected_frames) / minimum_frames,
+        })
+        available_controls += 1
+        available_low_event_controls += 1
 
     def process_episode(episode_index: int, events: Sequence[Dict[str, Any]]) -> None:
         nonlocal positive_count, bad_frame_event_count
@@ -302,6 +356,7 @@ def plan_qc_clips(
             positive_count += 1
             occupied.append((start, end))
         add_controls(episode_index, length, occupied)
+        add_low_event_control(episode_index, length, by_frame)
 
     for event in _iter_jsonl(quality_root / "bad_frames.jsonl"):
         episode_index = int(event["episode_index"])
@@ -442,7 +497,7 @@ def plan_qc_clips(
         # Numeric/schema-only failures do not need a visual teacher.  Keep
         # their clip as review evidence, but do not spend API tokens on it.
         trigger_tasks = list(candidate["candidate_tasks"])
-        if not trigger_tasks and candidate["selection_source"] != "deterministic_clean_gap_control":
+        if not trigger_tasks and not candidate["selection_source"].endswith("_control"):
             continue
         # Once a clip reaches the visual teacher, ask for a broad assessment.
         # Trigger tasks explain why it was recalled; they must not constrain
@@ -513,9 +568,11 @@ def plan_qc_clips(
         "clips": len(clip_rows),
         "teacher_api_requests": len(api_rows),
         "requested_random_controls": requested_controls,
-        "available_clean_gap_controls": available_controls,
+        "available_control_candidates": available_controls,
+        "available_clean_gap_controls": available_clean_gap_controls,
+        "available_low_event_controls": available_low_event_controls,
         "produced_random_controls": sum(
-            row["selection_source"] == "deterministic_clean_gap_control"
+            row["selection_source"].endswith("_control")
             for row in clip_rows
         ),
         "bounded_streaming_selection": bounded_limit is not None,
