@@ -44,7 +44,7 @@ from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
 from .teacher_queue import merge_teacher_queues
-from .queue_gold import build_queue_gold_review
+from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
 from .synthetic_qc import build_synthetic_qc_training
 from .interventions import plan_qc_interventions, run_qc_interventions
@@ -402,6 +402,17 @@ def main() -> None:
     queue_gold.add_argument("--seed", type=int, default=23)
     queue_gold.add_argument("--materialize-media", action="store_true")
     queue_gold.add_argument("--workers", type=int, default=8)
+    queue_gold_overlay = sub.add_parser(
+        "render-queue-gold-overlays",
+        help="为 clip 级 Gold 任务批量渲染 MANO mesh 和骨骼参考视图",
+    )
+    queue_gold_overlay.add_argument("--events", type=Path, required=True)
+    queue_gold_overlay.add_argument("--output", type=Path, required=True)
+    queue_gold_overlay.add_argument("--hawor-root", type=Path, required=True)
+    queue_gold_overlay.add_argument("--mano-data-root", type=Path)
+    queue_gold_overlay.add_argument("--workers", type=int, default=4)
+    queue_gold_overlay.add_argument("--mano-alpha", type=float, default=0.48)
+    queue_gold_overlay.add_argument("--maximum-events", type=int)
     adapter_clip_plan = sub.add_parser(
         "plan-adapter-clips",
         help="从 EgoDex 等只读 adapter 样本生成低成本视觉教师队列",
@@ -1037,6 +1048,17 @@ def main() -> None:
             seed=args.seed,
             materialize_media=args.materialize_media,
             workers=args.workers,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "render-queue-gold-overlays":
+        summary = render_queue_gold_overlays(
+            args.events,
+            args.output,
+            args.hawor_root,
+            mano_data_root=args.mano_data_root,
+            workers=args.workers,
+            alpha=args.mano_alpha,
+            maximum_events=args.maximum_events,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-adapter-clips":

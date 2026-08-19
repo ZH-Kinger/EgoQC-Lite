@@ -6,16 +6,19 @@ import os
 import subprocess
 import time
 from collections import Counter, defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Deque, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Deque, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .gold_review import CAUSE_OPTIONS, GOLD_LABELS, ISSUE_DESCRIPTIONS, ISSUE_LABELS
+from .annotated_video import render_annotated_episode
+from .mano import HaworManoBackend, ManoOverlayRenderer
 from .provenance import code_version
 from .report import write_json, write_jsonl
 
 
 SCHEMA_VERSION = "egoqc-queue-gold-review-v1"
+_OVERLAY_RENDERER: Optional[ManoOverlayRenderer] = None
 
 
 def _read_jsonl(path: Path) -> Iterable[Dict[str, Any]]:
@@ -104,6 +107,59 @@ def _materialize(request: Dict[str, Any], media_root: Path) -> Dict[str, Any]:
     return {"request_id": request_id, "output": str(output), "cached": False}
 
 
+def _dataset_root(source_uri: str) -> Path:
+    source = Path(source_uri).expanduser().resolve()
+    parts = source.parts
+    try:
+        videos_index = parts.index("videos")
+    except ValueError as error:
+        raise ValueError(f"无法从 source_uri 定位 LeRobot dataset: {source}") from error
+    return Path(*parts[:videos_index])
+
+
+def _init_overlay_worker(
+    hawor_root: str, mano_data_root: Optional[str], alpha: float
+) -> None:
+    global _OVERLAY_RENDERER
+    _OVERLAY_RENDERER = ManoOverlayRenderer(
+        HaworManoBackend(
+            Path(hawor_root),
+            Path(mano_data_root) if mano_data_root else None,
+        ),
+        alpha=alpha,
+    )
+
+
+def _render_overlay_job(event: Dict[str, Any], media_root: str) -> Dict[str, Any]:
+    if _OVERLAY_RENDERER is None:
+        raise RuntimeError("MANO overlay worker 未初始化")
+    video_id = str(event["video_id"])
+    output = Path(media_root) / f"{video_id}-annotated.mp4"
+    provenance_path = output.with_suffix(".provenance.json")
+    start_frame = int(event["clip_start_frame"])
+    end_frame = int(event["clip_end_frame"])
+    expected = {
+        "dataset": str(_dataset_root(str(event["source_uri"]))),
+        "episode_index": int(event["parent_episode_index"]),
+        "render_start_frame": start_frame,
+        "render_end_frame": end_frame,
+    }
+    if output.is_file() and provenance_path.is_file():
+        previous = json.loads(provenance_path.read_text(encoding="utf-8"))
+        if all(previous.get(key) == value for key, value in expected.items()):
+            return {"video_id": video_id, "output": str(output), "cached": True}
+    render_annotated_episode(
+        Path(expected["dataset"]),
+        int(event["parent_episode_index"]),
+        output,
+        _OVERLAY_RENDERER,
+        start_frame=start_frame,
+        max_frames=end_frame - start_frame,
+        batch_size=32,
+    )
+    return {"video_id": video_id, "output": str(output), "cached": False}
+
+
 def build_queue_gold_review(
     queue: Path,
     output: Path,
@@ -170,6 +226,8 @@ def build_queue_gold_review(
             "source_dataset": row.get("source_dataset"),
             "supplier_id": row.get("supplier_id"),
             "parent_episode_index": row.get("parent_episode_index"),
+            "clip_start_frame": int(row.get("clip_start_frame") or 0),
+            "clip_end_frame": int(row.get("clip_end_frame") or 0),
             "tasks": row.get("tasks") or [],
             "selection_source": selection_source,
             "trigger_tasks": row.get("trigger_tasks") or [],
@@ -216,4 +274,79 @@ def build_queue_gold_review(
         "review_events_path": str(artifact),
     }
     write_json(output / "summary.json", summary)
+    return summary
+
+
+def render_queue_gold_overlays(
+    events_path: Path,
+    output: Path,
+    hawor_root: Path,
+    *,
+    mano_data_root: Optional[Path] = None,
+    workers: int = 4,
+    alpha: float = 0.48,
+    maximum_events: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Render MANO mesh/skeleton evidence for an existing Gold review batch."""
+
+    if workers < 1 or (maximum_events is not None and maximum_events < 0):
+        raise ValueError("workers/maximum_events 参数非法")
+    started = time.perf_counter()
+    events = list(_read_jsonl(events_path))
+    selected = events if maximum_events is None else events[:maximum_events]
+    output = output.expanduser().resolve()
+    media_root = output / "media"
+    media_root.mkdir(parents=True, exist_ok=True)
+    rendered: Dict[str, str] = {}
+    failures: List[Dict[str, str]] = []
+    cached = 0
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        initializer=_init_overlay_worker,
+        initargs=(
+            str(hawor_root.expanduser().resolve()),
+            str(mano_data_root.expanduser().resolve()) if mano_data_root else None,
+            alpha,
+        ),
+    ) as executor:
+        futures = {
+            executor.submit(_render_overlay_job, event, str(media_root)): event
+            for event in selected
+        }
+        for future in as_completed(futures):
+            event = futures[future]
+            try:
+                result = future.result()
+                rendered[str(event["video_id"])] = str(result["output"])
+                cached += int(bool(result["cached"]))
+            except Exception as error:
+                failures.append({
+                    "video_id": str(event["video_id"]),
+                    "error_type": type(error).__name__,
+                    "error": str(error),
+                })
+
+    updated = []
+    for event in events:
+        row = dict(event)
+        annotated = rendered.get(str(row["video_id"]))
+        if annotated:
+            row["annotated_clip_path"] = annotated
+        updated.append(row)
+    artifact = output / "review-events-with-overlays.jsonl"
+    write_jsonl(artifact, updated)
+    summary = {
+        "schema_version": "egoqc-queue-gold-overlays-v1",
+        "events": str(events_path.expanduser().resolve()),
+        "requested": len(selected),
+        "rendered": len(rendered),
+        "cached": cached,
+        "created": len(rendered) - cached,
+        "failures": failures,
+        "workers": workers,
+        "elapsed_s": time.perf_counter() - started,
+        "raw_source_readonly": True,
+        "review_events_with_overlays": str(artifact),
+    }
+    write_json(output / "overlay-summary.json", summary)
     return summary
