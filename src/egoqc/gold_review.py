@@ -165,6 +165,7 @@ def materialize_episode_clip(
                 break
             output_frame = frame.reformat(width=width, height=height, format="yuv420p")
             output_frame.pts = rendered
+            output_frame.time_base = Fraction(rate.denominator, rate.numerator)
             for packet in target.encode(output_frame):
                 sink.mux(packet)
             rendered += 1
