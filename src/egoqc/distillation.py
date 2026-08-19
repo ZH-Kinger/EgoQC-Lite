@@ -374,9 +374,10 @@ def audit_qc_training_data(
         supplier = row.get("supplier_id") or row.get("vendor_id")
         if supplier:
             supplier_splits[str(supplier)].add(split)
-        for field in ("supplier_id", "scene_id", "camera_id", "task_id"):
-            if not row.get(field):
-                metadata_missing_counts[field] += 1
+        if split != "train":
+            for field in ("supplier_id", "scene_id", "camera_id", "task_id"):
+                if not row.get(field):
+                    metadata_missing_counts[field] += 1
         if distillation.get("leakage_risk") == "high":
             high_risk += 1
         if split == "train" and not row.get("vla_pretraining", {}).get("training_ready", False):

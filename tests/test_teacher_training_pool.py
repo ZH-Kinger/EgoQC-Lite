@@ -47,6 +47,42 @@ def test_build_teacher_training_pool_is_train_only(tmp_path: Path) -> None:
     assert row["source_dataset"] == "supplier-batch-a"
     assert row["supplier_id"] == "vendor-a"
     assert row["parent_episode_index"] == 42
+    assert row["task_id"] == "demo"
     assert row["distillation"]["split_group"] == "supplier-batch-a:raw-video:abc"
+    assert row["distillation"]["split_group_source"] == "raw_source_uri"
+    assert row["distillation"]["leakage_risk"] == "low"
+
+
+def test_legacy_egodex_queue_infers_public_provenance(tmp_path: Path) -> None:
+    config = tmp_path / "tasks.json"
+    config.write_text(json.dumps({"model_tasks": {"shake": {}}}), encoding="utf-8")
+    label = tmp_path / "label.json"
+    label.write_text(json.dumps({
+        "schema_version": "egoqc-visual-teacher-v1",
+        "overall": {
+            "training_usable": True,
+            "recommended_route": "accept",
+            "confidence": 0.95,
+        },
+        "tasks": {"shake": {"probability": 0.05, "confidence": 0.9}},
+    }), encoding="utf-8")
+    queue = tmp_path / "queue.jsonl"
+    queue.write_text(json.dumps({
+        "request_id": "egodex-one",
+        "episode_id": "extra/task/1",
+        "task": "fold_clothes",
+        "source_uri": "/mnt/data/egodex/extra/task/1.mp4",
+        "clip_start_s": 1.0,
+        "clip_end_s": 5.0,
+        "output_path": str(label),
+    }) + "\n", encoding="utf-8")
+
+    build_teacher_training_pool(queue, config, tmp_path / "out")
+    row = json.loads((tmp_path / "out/teacher-train-high-confidence.jsonl").read_text())
+
+    assert row["source_class"] == "public_dataset"
+    assert row["source_dataset"] == "egodex"
+    assert row["supplier_id"] == "public:egodex"
+    assert row["task_id"] == "fold_clothes"
     assert row["distillation"]["split_group_source"] == "raw_source_uri"
     assert row["distillation"]["leakage_risk"] == "low"

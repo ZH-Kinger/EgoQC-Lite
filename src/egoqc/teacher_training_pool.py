@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -133,8 +133,21 @@ def build_teacher_training_pool(
         start_s = float(request["clip_start_s"])
         end_s = float(request["clip_end_s"])
         source_uri = str(request.get("raw_source_uri") or request["source_uri"])
-        source_dataset = str(request.get("source_dataset") or "unknown_dataset")
-        source_class = str(request.get("source_class") or "unknown")
+        source_dataset_value = request.get("source_dataset")
+        if not source_dataset_value and request_id.startswith("egodex-"):
+            source_dataset_value = "egodex"
+        source_dataset = str(source_dataset_value or "unknown_dataset")
+        source_class_value = request.get("source_class")
+        if not source_class_value and source_dataset == "egodex":
+            source_class_value = "public_dataset"
+        source_class = str(source_class_value or "unknown")
+        supplier_id = request.get("supplier_id")
+        if not supplier_id and source_class == "public_dataset":
+            supplier_id = f"public:{source_dataset}"
+        activities = list(request.get("tasks") or [str(request.get("task") or "")])
+        task_id = request.get("task_id") or next(
+            (value for value in activities if value), None
+        )
         split_group, split_group_source, leakage_risk = _split_group(
             request, source_dataset, source_uri
         )
@@ -144,11 +157,15 @@ def build_teacher_training_pool(
             "video_id": request_id,
             "source_class": source_class,
             "source_dataset": source_dataset,
-            "supplier_id": request.get("supplier_id"),
+            "supplier_id": supplier_id,
             "parent_episode_index": request.get("parent_episode_index"),
+            "parent_episode_id": request.get("episode_id"),
+            "scene_id": request.get("scene_id"),
+            "camera_id": request.get("camera_id"),
+            "task_id": task_id,
             "source_uri": source_uri,
             "duration_s": float(request.get("duration_s") or end_s),
-            "activities": list(request.get("tasks") or [str(request.get("task") or "")]),
+            "activities": activities,
             "candidate_tier": request.get("candidate_tier"),
             "provenance": {
                 "raw_immutable": True,
