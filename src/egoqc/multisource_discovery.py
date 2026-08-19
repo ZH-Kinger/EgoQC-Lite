@@ -69,19 +69,30 @@ def discover_lerobot_roots(
     output: Path,
     *,
     maximum_per_task: Optional[int] = 2,
+    maximum_tasks: Optional[int] = None,
     workers: int = 16,
     seed: int = 17,
 ) -> Dict[str, Any]:
     """Discover the fixed ``task/dataset/meta/info.json`` layout without deep rglob."""
     if maximum_per_task is not None and maximum_per_task <= 0:
         raise ValueError("maximum_per_task 必须大于 0")
+    if maximum_tasks is not None and maximum_tasks <= 0:
+        raise ValueError("maximum_tasks 必须大于 0")
     if workers <= 0:
         raise ValueError("workers 必须大于 0")
     source_root = source_root.expanduser().resolve()
     output = output.expanduser().resolve()
     ensure_readonly_source_boundary(source_root, output)
 
-    task_roots = sorted(path for path in source_root.iterdir() if path.is_dir())
+    all_task_roots = sorted(
+        path for path in source_root.iterdir() if path.is_dir()
+    )
+    task_roots = all_task_roots
+    if maximum_tasks is not None:
+        task_roots = sorted(
+            all_task_roots,
+            key=lambda path: _rank(path.relative_to(source_root), seed),
+        )[:maximum_tasks]
     roots: List[Path] = []
     errors: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -144,8 +155,10 @@ def discover_lerobot_roots(
         "source_readonly": True,
         "dataset_roots": len(records),
         "task_groups": len({row["task_group"] for row in records}),
+        "available_task_groups": len(all_task_roots),
         "errors": len(errors),
         "maximum_per_task": maximum_per_task,
+        "maximum_tasks": maximum_tasks,
         "workers": workers,
         "episode_hints": sum(int(row.get("total_episodes") or 0) for row in records),
         "frame_hints": sum(int(row.get("total_frames") or 0) for row in records),

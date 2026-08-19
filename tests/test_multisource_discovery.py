@@ -65,6 +65,34 @@ class MultisourceDiscoveryTests(unittest.TestCase):
             self.assertEqual(summary["dataset_roots"], 1)
             self.assertEqual(summary["errors"], 0)
 
+    def test_can_bound_number_of_task_groups(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "source"
+            output = base / "output"
+            for task in ("a", "b", "c", "d"):
+                meta = source / task / "dataset" / "meta"
+                meta.mkdir(parents=True)
+                (meta / "info.json").write_text(json.dumps({
+                    "total_episodes": 1,
+                    "total_frames": 30,
+                    "fps": 30.0,
+                    "features": {"observation.images.ego": {}},
+                }))
+
+            summary = discover_lerobot_roots(
+                source,
+                output,
+                maximum_per_task=1,
+                maximum_tasks=2,
+                workers=2,
+                seed=99,
+            )
+
+            self.assertEqual(summary["available_task_groups"], 4)
+            self.assertEqual(summary["task_groups"], 2)
+            self.assertEqual(summary["dataset_roots"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

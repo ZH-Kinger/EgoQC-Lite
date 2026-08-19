@@ -499,6 +499,11 @@ def main() -> None:
     discover_sources.add_argument("source_root", type=Path)
     discover_sources.add_argument("--output", type=Path, required=True)
     discover_sources.add_argument("--maximum-per-task", type=int, default=2)
+    discover_sources.add_argument(
+        "--maximum-tasks",
+        type=int,
+        help="按 seed 确定性抽取最多多少个任务目录；默认全部任务",
+    )
     discover_sources.add_argument("--workers", type=int, default=16)
     discover_sources.add_argument("--seed", type=int, default=17)
     task_taxonomy = sub.add_parser(
@@ -1172,6 +1177,7 @@ def main() -> None:
             args.source_root,
             args.output,
             maximum_per_task=args.maximum_per_task,
+            maximum_tasks=args.maximum_tasks,
             workers=args.workers,
             seed=args.seed,
         )
