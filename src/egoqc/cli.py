@@ -43,7 +43,7 @@ from .research_evaluation import evaluate_qc_research_protocol
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
-from .teacher_queue import merge_teacher_queues
+from .teacher_queue import build_overlay_teacher_queue, merge_teacher_queues
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
 from .synthetic_qc import build_synthetic_qc_training
@@ -392,6 +392,13 @@ def main() -> None:
     queue_merge.add_argument("--output", type=Path, required=True)
     queue_merge.add_argument("--maximum-requests", type=int)
     queue_merge.add_argument("--seed", type=int, default=17)
+    overlay_queue = sub.add_parser(
+        "build-overlay-teacher-queue",
+        help="把 Gold MANO 叠加短片绑定到教师请求，保留 raw 溯源",
+    )
+    overlay_queue.add_argument("--queue", type=Path, required=True)
+    overlay_queue.add_argument("--review-events", type=Path, required=True)
+    overlay_queue.add_argument("--output", type=Path, required=True)
     queue_gold = sub.add_parser(
         "build-queue-gold-review",
         help="从多源教师候选分层生成 4–8 秒人工 Gold 复检任务",
@@ -1038,6 +1045,13 @@ def main() -> None:
             args.output,
             maximum_requests=args.maximum_requests,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-overlay-teacher-queue":
+        summary = build_overlay_teacher_queue(
+            args.queue,
+            args.review_events,
+            args.output,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "build-queue-gold-review":

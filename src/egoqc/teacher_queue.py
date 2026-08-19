@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from collections import Counter, defaultdict, deque
@@ -115,6 +116,78 @@ def merge_teacher_queues(
         },
         "raw_source_readonly": True,
         "code_version": code_version(),
+        "queue": str(artifact),
+    }
+    write_json(output / "summary.json", summary)
+    return summary
+
+
+def build_overlay_teacher_queue(
+    queue: Path,
+    review_events: Path,
+    output: Path,
+) -> Dict[str, Any]:
+    """Bind derived MANO overlay clips to teacher requests without losing raw provenance."""
+
+    requests = {str(row["request_id"]): row for row in _read_jsonl(queue)}
+    output = output.expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    rows: List[Dict[str, Any]] = []
+    missing_requests = []
+    missing_overlays = []
+    for event in _read_jsonl(review_events):
+        request_id = str(event.get("video_id") or "")
+        request = requests.get(request_id)
+        if request is None:
+            missing_requests.append(request_id)
+            continue
+        overlay = Path(str(event.get("annotated_clip_path") or ""))
+        if not overlay.is_file():
+            missing_overlays.append(request_id)
+            continue
+        row = copy.deepcopy(request)
+        original_start = float(row["clip_start_s"])
+        original_end = float(row["clip_end_s"])
+        duration = original_end - original_start
+        row["raw_source_uri"] = str(row.get("raw_source_uri") or row["source_uri"])
+        row["source_uri"] = str(overlay.resolve())
+        row["source_clip_start_s"] = original_start
+        row["source_clip_end_s"] = original_end
+        row["clip_start_s"] = 0.0
+        row["clip_end_s"] = duration
+        row["duration_s"] = duration
+        row["visual_evidence"] = "mano_mesh_skeleton_overlay"
+        row["overlay_artifact"] = str(overlay.resolve())
+        row["prompt_version"] = "egoqc-visual-teacher-v4-mano-overlay"
+        row["output_path"] = str(
+            output / "teacher-labels" / request_id / "teacher-label.json"
+        )
+        trigger_tasks = set(str(value) for value in (row.get("trigger_tasks") or []))
+        trigger_tasks.add("mano_overlay_drift")
+        row["trigger_tasks"] = sorted(trigger_tasks)
+        rows.append(row)
+
+    artifact = output / "teacher-api-queue.jsonl"
+    write_jsonl(artifact, rows)
+    summary = {
+        "schema_version": "egoqc-overlay-teacher-queue-v1",
+        "input_queue": str(queue.expanduser().resolve()),
+        "review_events": str(review_events.expanduser().resolve()),
+        "requests": len(rows),
+        "missing_requests": missing_requests,
+        "missing_overlays": missing_overlays,
+        "source_counts": dict(Counter(str(row.get("source_dataset")) for row in rows)),
+        "visual_evidence": "mano_mesh_skeleton_overlay",
+        "raw_source_readonly": True,
+        "derived_media_only": True,
+        "external_transfer": {
+            "contains_supplier_data": any(
+                row.get("source_class") == "supplier_dataset" for row in rows
+            ),
+            "requires_explicit_runtime_authorization": any(
+                row.get("source_class") == "supplier_dataset" for row in rows
+            ),
+        },
         "queue": str(artifact),
     }
     write_json(output / "summary.json", summary)
