@@ -49,6 +49,8 @@ class EstimateAndTunerTests(unittest.TestCase):
             self.assertEqual(summary["episode_count"], 1)
             self.assertIn("交互式阈值调优", document)
             self.assertIn("position_jitter_error_m", document)
+            self.assertIn('addControl("timing","bad_frame_ratio_max"', document)
+            self.assertIn("bad_frame_ratio=", document)
             self.assertIn("下载版本化配置", document)
 
     def test_retry_plan_deduplicates_failed_shards(self):

@@ -67,18 +67,21 @@ const metricRules=[
  ["camera_translation_jitter_p99_mm","camera_jitter_warning_m","camera_jitter_error_m",1000],
  ["camera_rotation_jitter_p99_deg","camera_rotation_jitter_warning_deg","camera_rotation_jitter_error_deg",1]
 ];
-const controls=document.getElementById("controls");Object.entries(config.thresholds).forEach(([key,value])=>{{if(typeof value!=="number")return;
- const row=document.createElement("label");row.className="row";row.innerHTML=`<span><code>${{key}}</code></span><input type="number" step="any" value="${{value}}" data-key="${{key}}">`;controls.appendChild(row);}});
+const controls=document.getElementById("controls");function addControl(scope,key,value){{if(typeof value!=="number")return;
+ const row=document.createElement("label");row.className="row";row.innerHTML=`<span><code>${{scope}}.${{key}}</code></span><input type="number" step="any" value="${{value}}" data-scope="${{scope}}" data-key="${{key}}">`;controls.appendChild(row);}}
+Object.entries(config.thresholds).forEach(([key,value])=>addControl("thresholds",key,value));
+addControl("timing","bad_frame_ratio_max",config.timing?.bad_frame_ratio_max);
 function evaluate(ep){{let level=0,triggers=[];for(const [metric,warnKey,errorKey,scale] of metricRules){{const value=Number(ep.metrics?.[metric]);if(!Number.isFinite(value))continue;
  const warn=Number(config.thresholds[warnKey])*scale,error=Number(config.thresholds[errorKey])*scale;if(value>error){{level=2;triggers.push(`${{metric}}=${{value.toFixed(2)}}`);}}
- else if(value>warn){{level=Math.max(level,1);triggers.push(`${{metric}}=${{value.toFixed(2)}}`);}}}}return {{level,triggers}};}}
+ else if(value>warn){{level=Math.max(level,1);triggers.push(`${{metric}}=${{value.toFixed(2)}}`);}}}}
+ const badRatio=Number(ep.metrics?.bad_frame_ratio),ratioLimit=Number(config.timing?.bad_frame_ratio_max);if(Number.isFinite(badRatio)&&Number.isFinite(ratioLimit)&&badRatio>=ratioLimit){{level=2;triggers.push(`bad_frame_ratio=${{(badRatio*100).toFixed(2)}}%`);}}return {{level,triggers}};}}
 function canonical(value){{if(Array.isArray(value))return `[${{value.map(canonical).join(',')}}]`;if(value&&typeof value==='object')return `{{${{Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+canonical(value[key])).join(',')}}}}`;return JSON.stringify(value);}}
 async function updateHash(){{const bytes=new TextEncoder().encode(canonical(config));const digest=await crypto.subtle.digest("SHA-256",bytes);document.getElementById("hash").textContent=Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,"0")).join("");}}
 function render(){{let clean=0,warning=0,error=0;const values=episodes.map(ep=>[ep,evaluate(ep)]);for(const [,r] of values){{r.level===0?clean++:r.level===1?warning++:error++;}}
  document.getElementById("total").textContent=episodes.length.toLocaleString();document.getElementById("clean").textContent=clean.toLocaleString();document.getElementById("warning").textContent=warning.toLocaleString();document.getElementById("error").textContent=error.toLocaleString();
  document.getElementById("changed").textContent=JSON.stringify(config)===original?"尚未修改阈值":"预览已变化；下载配置后必须以新版本重新 plan。";
  document.getElementById("rows").innerHTML=values.filter(([,r])=>r.level>0).slice(0,300).map(([ep,r])=>`<tr><td>${{ep.episode_index}}</td><td>${{ep.tier}}</td><td class="${{r.level===2?'error':'warn'}}">${{r.level===2?'error':'warning'}}</td><td><code>${{r.triggers.join('<br>')}}</code></td></tr>`).join("");updateHash();}}
-controls.addEventListener("input",event=>{{const input=event.target;if(!input.dataset.key)return;config.thresholds[input.dataset.key]=Number(input.value);render();}});
+controls.addEventListener("input",event=>{{const input=event.target;if(!input.dataset.key||!input.dataset.scope)return;config[input.dataset.scope][input.dataset.key]=Number(input.value);render();}});
 document.getElementById("download").addEventListener("click",()=>{{const blob=new Blob([JSON.stringify(config,null,2)],{{type:"application/json"}});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`egoqc-${{config.standard_version}}-tuned.json`;a.click();URL.revokeObjectURL(a.href);}});render();</script></body></html>"""
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.name}.{os.getpid()}.tmp")
