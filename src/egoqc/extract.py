@@ -36,6 +36,23 @@ def _fps(info: Dict[str, Any], video_key: str) -> float:
     return float(info["features"][video_key]["info"]["video.fps"])
 
 
+def _frame_index_from_pts(
+    pts: int,
+    start_pts: int,
+    time_base: Any,
+    fps: float,
+) -> int:
+    """Map a presentation timestamp to the decoded frame ordinal.
+
+    Some H.264 encoders timestamp a frame at its centre, ``(n + 0.5) / fps``.
+    Rounding would collapse adjacent frames through bankers' rounding; flooring
+    preserves the ordinal for both edge- and centre-timestamped CFR streams.
+    """
+
+    frame_position = float((int(pts) - int(start_pts)) * time_base) * fps
+    return int(math.floor(frame_position + 1e-6))
+
+
 def _decode_requested_frames(
     video_path: Path,
     requested_indices: List[int],
@@ -88,10 +105,12 @@ def _decode_requested_frames(
                     statistics["decoded_frames"] += 1
                     if frame.pts is None:
                         continue
-                    timestamp_s = float(
-                        (int(frame.pts) - start_pts) * stream.time_base
+                    decoded_index = _frame_index_from_pts(
+                        int(frame.pts),
+                        start_pts,
+                        stream.time_base,
+                        fps,
                     )
-                    decoded_index = int(round(timestamp_s * fps))
                     if decoded_index in pending:
                         images[decoded_index] = frame.to_image()
                         pending.remove(decoded_index)

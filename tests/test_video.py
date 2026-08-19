@@ -1,13 +1,22 @@
 import tempfile
 import unittest
+from fractions import Fraction
 from pathlib import Path
 
 from create_fixture import create_fixture
-from egoqc.extract import _decode_requested_frames
+
+from egoqc.extract import _decode_requested_frames, _frame_index_from_pts
 from egoqc.video import probe_video
 
 
 class VideoProbeTests(unittest.TestCase):
+    def test_half_frame_pts_does_not_collapse_adjacent_indices(self):
+        time_base = Fraction(1, 15360)
+        # 512 ticks/frame at 30 FPS, shifted by half a frame (256 ticks).
+        self.assertEqual(_frame_index_from_pts(256, 0, time_base, 30.0), 0)
+        self.assertEqual(_frame_index_from_pts(768, 0, time_base, 30.0), 1)
+        self.assertEqual(_frame_index_from_pts(1280, 0, time_base, 30.0), 2)
+
     def test_header_mode_does_not_claim_exact_count(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = create_fixture(Path(temporary) / "dataset", frames=7)
