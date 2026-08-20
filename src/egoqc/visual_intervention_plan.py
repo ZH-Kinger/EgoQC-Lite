@@ -32,6 +32,24 @@ def _primary_primitive(row: Mapping[str, Any]) -> str:
     return str(values[0])
 
 
+def _has_capability(row: Mapping[str, Any], capability: str) -> bool:
+    if capability == "raw_rgb":
+        return bool(row.get("source_uri") or row.get("raw_source_uri"))
+    if capability == "task_text":
+        taxonomy = row.get("task_taxonomy") or {}
+        return str(taxonomy.get("normalized_task") or "unknown") != "unknown"
+    if capability == "mano_overlay":
+        context = row.get("capability_context") or {}
+        evidence = row.get("visual_evidence") or {}
+        return bool(
+            context.get("mano_overlay")
+            or context.get("overlay_available")
+            or evidence.get("overlay_video")
+            or evidence.get("annotated_video")
+        )
+    return False
+
+
 def build_visual_intervention_plan(
     records: Path,
     config: Path,
@@ -75,6 +93,13 @@ def build_visual_intervention_plan(
             break
 
     family_names = sorted(families)
+    available_families = [
+        name for name in family_names
+        if any(_has_capability(row, str(families[name].get("required_capability") or "raw_rgb")) for row in selected)
+    ]
+    unavailable_families = sorted(set(family_names) - set(available_families))
+    if not available_families:
+        raise ValueError("所选 records 不具备任何 intervention 所需 capability")
     primitive_donors: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for row in rows:
         primitive_donors[_primary_primitive(row)].append(row)
@@ -82,7 +107,11 @@ def build_visual_intervention_plan(
     family_counts = Counter()
     task_counts = Counter()
     for index, row in enumerate(selected):
-        family = family_names[index % len(family_names)]
+        eligible = [
+            name for name in available_families
+            if _has_capability(row, str(families[name].get("required_capability") or "raw_rgb"))
+        ]
+        family = eligible[index % len(eligible)]
         family_spec = families[family]
         request_id = str(row.get("request_id") or row.get("split_group"))
         identity = _rank(seed + 1, f"{request_id}:{family}")[:24]
@@ -103,6 +132,7 @@ def build_visual_intervention_plan(
             "split_group": row.get("split_group"),
             "source_dataset": row.get("source_dataset"),
             "family": family,
+            "required_capability": family_spec.get("required_capability") or "raw_rgb",
             "parameters": family_spec.get("parameters") or {},
             "target_tasks": target_tasks,
             "donor_request_id": donor_request_id,
@@ -127,8 +157,10 @@ def build_visual_intervention_plan(
         "interventions": len(plans),
         "source_split_groups": len({str(row.get("split_group")) for row in selected}),
         "counts_by_family": dict(family_counts),
+        "unavailable_families": unavailable_families,
         "target_task_counts": dict(task_counts),
         "real_only_tasks": list(specification.get("real_only_tasks") or []),
+        "capability_required_tasks": dict(specification.get("capability_required_tasks") or {}),
         "lazy_on_cached_frames": True,
         "materialized_images": 0,
         "synthetic_is_not_gold": True,
