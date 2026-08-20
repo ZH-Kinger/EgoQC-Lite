@@ -19,6 +19,11 @@ person/session 聚类置信区间和供应商 worst-group。协议见
 [`docs/ieee-experiment-protocol.md`](docs/ieee-experiment-protocol.md)，命令为
 `egoqc evaluate-qc-research`。
 
+所有实验、失败、中断、性能优化和结论边界统一记录在
+[`docs/experiment-log.md`](docs/experiment-log.md)；对应机器可读日志为
+[`artifacts/experiments/experiment-run-log.jsonl`](artifacts/experiments/experiment-run-log.jsonl)。
+弱教师一致性、JSON 覆盖率和合成干预命中率不得作为人工 Gold 准确率。
+
 IE-QC Phase A 已提供只读的可控标注干预和 evidence-delta 实验闭环。它在内存中重放
 timestamp、wrist、camera、MANO pose/mask/shape 等七类错误，不复制或覆盖原始 Parquet，
 并明确禁止用合成结果改变验收结论。设计、命令和真实 Gold 停止条件见

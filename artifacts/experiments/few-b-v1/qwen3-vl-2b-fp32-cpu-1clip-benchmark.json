@@ -1,0 +1,65 @@
+{
+  "schema_version": "egoqc-few-b-vlm-benchmark-v1",
+  "created_at": "2026-08-20T03:44:55.866611+00:00",
+  "status": "preliminary_speed_and_structured_output_only",
+  "accuracy_measured": false,
+  "accuracy_claim_authorized": false,
+  "model_id": "Qwen/Qwen3-VL-2B-Instruct",
+  "model_path_sha256": "111a0f262f58786c715dbce44034c51b7594d1175ac28c3186961bc1c8806e72",
+  "model_artifact": {
+    "sha256": "4846db308f57810a59312fdc123a9f5b321e2ed1fa7b33eceabb8b51af62765a",
+    "bytes": 4266649720,
+    "files": 13,
+    "fingerprint_seconds": 3.6279321969486773
+  },
+  "parameter_count": 2127532032,
+  "precision": "fp32",
+  "device": "cpu",
+  "model_load_seconds": 1.4313041409477592,
+  "model_memory_mb": null,
+  "clips": 1,
+  "successful_clips": 1,
+  "structured_json_valid_clips": 1,
+  "video_seconds": 6.0,
+  "wall_seconds_excluding_model_load": 5.726766096893698,
+  "video_hours_per_wall_hour": 1.0477117274362766,
+  "latency_seconds": {
+    "total_p50": 5.726766096893698,
+    "total_p95": 5.726766096893698,
+    "decode_p50": 0.17469267593696713,
+    "preprocess_p50": 0.08681022212840617,
+    "generation_p50": 5.464866796974093
+  },
+  "code_version": "0.7.0+src.5ca9a2753e57e6c4",
+  "environment": {
+    "platform": "Linux-5.10.134-013.8.2.kangaroo.al8.x86_64-x86_64-with-glibc2.35",
+    "python": "3.12.13",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.8.1",
+    "cuda_device": null
+  },
+  "input_protocol": {
+    "frame_count": 8,
+    "maximum_edge": 448,
+    "selection_seed": 17,
+    "selection_strategy": "stable_random",
+    "maximum_clips": 1,
+    "max_new_tokens": 128,
+    "wire_output_schema": "compact_sparse_findings_v1",
+    "task_order": [
+      "hand_absent",
+      "persistent_extra_hands",
+      "semantic_camera_shake",
+      "severe_occlusion",
+      "mano_overlay_drift",
+      "task_label_mismatch",
+      "subtask_boundary_error",
+      "unusable_visual_quality",
+      "action_not_observable",
+      "interaction_incomplete",
+      "frozen_or_duplicate_frames",
+      "severe_lens_artifact",
+      "scene_task_out_of_scope"
+    ]
+  }
+}

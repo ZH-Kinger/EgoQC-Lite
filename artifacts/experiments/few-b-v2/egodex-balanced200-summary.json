@@ -1,0 +1,31 @@
+{
+  "schema_version": "egoqc-few-b-frozen-samples-v1",
+  "status": "frozen_not_evaluated",
+  "input_manifest": "/mnt/workspace/qc-training-data/egodex-teacher-pool-v5/teacher-train-high-confidence.jsonl",
+  "input_manifest_sha256": "f52048b17106bfe2d7554efac998e69416021062fe7d390c00e4b84b5735817f",
+  "samples": 200,
+  "maximum_clips": 200,
+  "selection_seed": 31,
+  "selection_strategy": "balanced_weak",
+  "positive_rows_by_weak_teacher": 100,
+  "negative_rows_by_weak_teacher": 100,
+  "positive_task_counts": {
+    "task_label_mismatch": 96,
+    "interaction_incomplete": 84,
+    "scene_task_out_of_scope": 87,
+    "subtask_boundary_error": 31,
+    "semantic_camera_shake": 3,
+    "action_not_observable": 21,
+    "severe_occlusion": 7,
+    "unusable_visual_quality": 11,
+    "persistent_extra_hands": 1
+  },
+  "source_counts": {
+    "egodex": 200
+  },
+  "split_groups": 200,
+  "teacher_labels_are_human_gold": false,
+  "formal_accuracy_claim_authorized": false,
+  "samples_sha256": "0d7251e2487b936322f2bf428877a7458939de2ed1e2ce168f51a5edd6088614",
+  "frozen_manifest": "/mnt/workspace/qc-training-data/model-ablation/few-b-v2/egodex-balanced200-v1/samples.jsonl"
+}

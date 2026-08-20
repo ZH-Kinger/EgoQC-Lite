@@ -1,0 +1,47 @@
+{
+  "schema_version": "egoqc-experiment-evidence-v1",
+  "experiment_id": "oss-pilot-v1",
+  "created_at": "2026-08-19T16:02:09.849688+00:00",
+  "code_version": "0.7.0+src.6df295bcf94ede0c",
+  "git_commit": "8db310aa5be4a8ff3df1991032a714eadb20265b",
+  "inputs": {
+    "events": {
+      "path": "/mnt/workspace/qc-training-data/oss-gold-calibration-v1/gold-review-overlays-v1/review-events-with-overlays.jsonl",
+      "sha256": "6fc4f8fd97d13a66a9c818ffe2f7669a2442ac4c6edc26effd8f5e7db56d0146"
+    },
+    "config": {
+      "path": "/mnt/workspace/ie-qc-code/src/egoqc/default.json",
+      "sha256": "4491d29febbc4272a3ef9f18399e1d9756ee388014c269b33c3822b03b2df8c6"
+    },
+    "run_results": {
+      "path": "/mnt/workspace/qc-training-data/oss-pilot-128-v1/run-results.jsonl",
+      "sha256": "2399e1d43cba5ebb890c2cd25bed8a9f7de0f8e78ab7a9deb8f239c8a69bec8b"
+    }
+  },
+  "parameters": {
+    "maximum_rule_positive": 12,
+    "maximum_clean_control": 6,
+    "maximum_low_event_control": 6,
+    "workers": 8,
+    "seed": 43
+  },
+  "environment": {
+    "python": "3.12.13",
+    "platform": "Linux-5.10.134-013.8.2.kangaroo.al8.x86_64-x86_64-with-glibc2.35",
+    "ffmpeg": "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers"
+  },
+  "selected": 24,
+  "created": 24,
+  "failures": [],
+  "bucket_counts": {
+    "rule-positive-high": 12,
+    "clean-control": 6,
+    "low-event-control": 6
+  },
+  "human_label_status": "pending",
+  "raw_source_readonly": true,
+  "external_api_called": false,
+  "elapsed_s": 5.595480109099299,
+  "gallery": "/mnt/workspace/qc-training-data/experiments/oss-pilot-v1/index.html",
+  "cases": "/mnt/workspace/qc-training-data/experiments/oss-pilot-v1/cases.jsonl"
+}

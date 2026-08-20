@@ -1,0 +1,86 @@
+{
+  "schema_version": "egoqc-source-ledger-v1",
+  "created_at": "2026-08-20T00:20:00+08:00",
+  "scope": "read-only mounted sources visible to the development machine",
+  "raw_sources_modified": false,
+  "deduplication_status": "pending_cross_source_deduplication",
+  "sources": [
+    {
+      "source_id": "supplier-lerobot-v3",
+      "source_kind": "supplier",
+      "storage_class": "object-storage-mount",
+      "episode_count": 96648,
+      "frame_count": 54467611,
+      "hours": 504.4345,
+      "hours_kind": "exact_from_metadata",
+      "dataset_roots": 13,
+      "mano_or_equivalent_state": "available_for_most_roots",
+      "calibration": "available_for_most_roots; two legacy roots require adapter review",
+      "training_readiness": "requires QC, deduplication, provenance split and human Gold labels"
+    },
+    {
+      "source_id": "internal-lerobot-v3",
+      "source_kind": "internal-or-curated",
+      "storage_class": "object-storage-mount",
+      "episode_count": 20181,
+      "complete_episode_count": 20076,
+      "incomplete_episode_count": 105,
+      "frame_count": 54419374,
+      "hours": 503.885,
+      "hours_kind": "exact_from_metadata",
+      "task_group_count": 1067,
+      "mano_or_equivalent_state": "available",
+      "calibration": "available",
+      "training_readiness": "pilot QC complete; Gold calibration labels pending"
+    },
+    {
+      "source_id": "public-egocentric-se3",
+      "source_kind": "public",
+      "storage_class": "object-storage-mount",
+      "video_annotation_pair_count": 334991,
+      "task_count": 118,
+      "profile_sample_count": 4792,
+      "profile_sample_hours": 21.7996,
+      "estimated_hours": 1523.93,
+      "hours_kind": "estimate_from_task_balanced_profile; not an exact duration sum",
+      "annotation_semantics": "25-joint SE(3) hand representation; not directly MANO",
+      "training_readiness": "usable for RGB, temporal and semantic QC after adapter validation; not for direct MANO regression"
+    },
+    {
+      "source_id": "public-rekadaily",
+      "source_kind": "public",
+      "storage_class": "not_currently_mounted",
+      "hours": null,
+      "hours_kind": "unknown",
+      "training_readiness": "not counted in accessible data"
+    }
+  ],
+  "totals": {
+    "exact_metadata_hours": 1008.3195,
+    "estimated_additional_hours": 1523.93,
+    "gross_accessible_hours": 2532.2495,
+    "gross_hours_warning": "Cross-source and cross-batch perceptual deduplication has not yet been applied, so this is mounted gross volume, not unique training hours."
+  },
+  "current_experiment_subset": {
+    "source_id": "internal-lerobot-v3",
+    "pilot_hours": 4.814,
+    "gold_candidate_clips": 180,
+    "auditable_comparison_cases": 24,
+    "interpretation": "Calibration subset only; it is not the full usable corpus."
+  },
+  "prepared_training_assets": {
+    "supplier_teacher_candidates": 1800,
+    "supplier_human_review_candidates": 180,
+    "supplier_raw_overlay_pairs": 180,
+    "public_egocentric_profiled_clips": 4792,
+    "public_egocentric_review_candidates": 2856,
+    "public_egocentric_teacher_train_records": 2720,
+    "public_egocentric_high_confidence_teacher_records": 2518,
+    "combined_weak_or_synthetic_training_rows": 10018,
+    "auditable_raw_overlay_comparison_cases": 43,
+    "controlled_interventions": 56,
+    "controlled_intervention_evidence_delta_rows": 4090,
+    "completed_human_gold_labels": 0,
+    "readiness": "not_ready_for_formal_training_or_99_percent_claims_until human Gold validation/test and cross-source splits are frozen"
+  }
+}

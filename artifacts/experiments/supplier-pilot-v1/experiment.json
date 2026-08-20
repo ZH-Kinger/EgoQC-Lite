@@ -1,0 +1,43 @@
+{
+  "schema_version": "egoqc-experiment-evidence-v1",
+  "experiment_id": "supplier-pilot-v1",
+  "created_at": "2026-08-20T02:36:45.223472+00:00",
+  "code_version": "0.7.0+src.6df295bcf94ede0c",
+  "git_commit": "8db310aa5be4a8ff3df1991032a714eadb20265b",
+  "inputs": {
+    "events": {
+      "path": "/mnt/workspace/qc-training-data/multisource-v1/shutu-gold-v1/review-events-with-overlays.jsonl",
+      "sha256": "2dae3d467395b3c8f92ac991b230149be5e925afbc21e60d96fc6d6a7d3174e7"
+    },
+    "config": {
+      "path": "/mnt/workspace/ie-qc-code/src/egoqc/default.json",
+      "sha256": "4491d29febbc4272a3ef9f18399e1d9756ee388014c269b33c3822b03b2df8c6"
+    }
+  },
+  "parameters": {
+    "maximum_rule_positive": 12,
+    "maximum_clean_control": 1,
+    "maximum_low_event_control": 6,
+    "workers": 8,
+    "seed": 47
+  },
+  "environment": {
+    "python": "3.12.13",
+    "platform": "Linux-5.10.134-013.8.2.kangaroo.al8.x86_64-x86_64-with-glibc2.35",
+    "ffmpeg": "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers"
+  },
+  "selected": 19,
+  "created": 19,
+  "failures": [],
+  "bucket_counts": {
+    "rule-positive-high": 12,
+    "clean-control": 1,
+    "low-event-control": 6
+  },
+  "human_label_status": "pending",
+  "raw_source_readonly": true,
+  "external_api_called": false,
+  "elapsed_s": 3.6544623330701143,
+  "gallery": "/mnt/workspace/qc-training-data/experiments/supplier-pilot-v1/index.html",
+  "cases": "/mnt/workspace/qc-training-data/experiments/supplier-pilot-v1/cases.jsonl"
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "egoqc-interrupted-run-snapshot-v1",
+  "experiment_id": "supplier434-local8b-partial-v1",
+  "snapshot_date": "2026-08-20",
+  "target_clips": 434,
+  "partial_records": 386,
+  "structured_json_valid_records": 386,
+  "partial_sha256": "5e6d22978867c281e82fbd537fe835153702fca077346647978c950c478bcf03",
+  "last_progress_checkpoint": {
+    "completed_clips": 385,
+    "resumed_clips": 134,
+    "elapsed_seconds": 308.0106856729835,
+    "average_seconds_per_new_clip": 1.2271342058684602,
+    "eta_seconds_at_checkpoint": 60.129576087554554,
+    "structured_json_valid_clips": 385
+  },
+  "checkpoint_difference": "The process was interrupted after writing record 386 and before updating progress.json; resume deduplicates by clip identity.",
+  "performance_stages": [
+    {
+      "stage": "per-target-random-seek",
+      "completed_at_snapshot": 22,
+      "average_seconds_per_clip": 6.565134392130528,
+      "eta_seconds": 2704.8353695577775
+    },
+    {
+      "stage": "single-seek-forward-decode",
+      "resumed_clips": 59,
+      "completed_at_snapshot": 67,
+      "average_seconds_per_new_clip": 3.2610306034912355,
+      "recent_8_decode_seconds_mean": 2.383,
+      "recent_8_preprocess_seconds_mean": 0.041,
+      "recent_8_generation_seconds_mean": 0.709,
+      "recent_8_total_seconds_mean": 3.134
+    },
+    {
+      "stage": "bounded-prefetch-4",
+      "resumed_clips": 134,
+      "completed_at_snapshot": 385,
+      "new_clips": 251,
+      "average_seconds_per_new_clip": 1.2271342058684602,
+      "speedup_vs_random_seek": 5.350
+    }
+  ],
+  "process_stopped": true,
+  "raw_source_readonly": true,
+  "external_supplier_api_called": false,
+  "derived_output_storage": "workspace",
+  "claim_boundary": "Structured output coverage and throughput only; no human-Gold accuracy was measured."
+}

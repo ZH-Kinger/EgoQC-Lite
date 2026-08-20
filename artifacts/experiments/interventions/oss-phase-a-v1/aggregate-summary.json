@@ -1,0 +1,29 @@
+{
+  "schema_version": "egoqc-intervention-aggregate-v1",
+  "created_at": "2026-08-20T00:45:00+08:00",
+  "experiment_id": "oss-phase-a-v1",
+  "source_is_read_only": true,
+  "source_paths_published": false,
+  "datasets": 4,
+  "episodes": 4,
+  "interventions": 56,
+  "intervention_families": 7,
+  "strengths_per_family": 2,
+  "evidence_delta_rows": 4090,
+  "target_hit_rate": 1.0,
+  "monotonic_non_decreasing_rate": 1.0,
+  "mean_interval_precision": {
+    "camera_translation_spike": 1.0,
+    "pose_representation_offset": 1.0,
+    "state_mask_dropout": 1.0,
+    "timestamp_offset": 0.9983471602541423,
+    "world_translation_scale": 1.0,
+    "wrist_position_offset": 1.0,
+    "beta_drift": null
+  },
+  "code_version": "0.7.0+src.6df295bcf94ede0c",
+  "git_commit": "8db310aa5be4a8ff3df1991032a714eadb20265b",
+  "config_sha256": "c339db7570cc1dfdb28c74d127fadc324277878b31d88cedee653ac93bc24ca1",
+  "interpretation": "This is a synthetic intervention sanity check. A 100% target hit rate only proves that the expected deterministic experts react to the injected defects; it is not real-data accuracy, human Gold performance, or authorization for automated acceptance or rejection.",
+  "next_gate": "Measure whether intervention response predicts expert correctness on independently human-labeled real defects across held-out sources."
+}

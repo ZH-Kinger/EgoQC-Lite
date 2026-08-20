@@ -1,0 +1,31 @@
+{
+  "schema_version": "egoqc-teacher-api-run-v1",
+  "experiment_id": "teacher-api-public-pilot-v1",
+  "requests": 2,
+  "status_counts": {
+    "succeeded": 2,
+    "cached": 0,
+    "dry_run": 0,
+    "failed": 0
+  },
+  "model": "qwen3-vl-plus",
+  "provider": "bailian",
+  "region": "beijing",
+  "endpoint_host": "dashscope.aliyuncs.com",
+  "dry_run": false,
+  "cost_profile": "low",
+  "credentials_stored": false,
+  "media_mode": "bailian_video_frames",
+  "sample_fps": 1.5,
+  "max_frames": 12,
+  "max_edge": 448,
+  "jpeg_quality": 72,
+  "usage": {
+    "input_tokens": 3138,
+    "output_tokens": 1414
+  },
+  "estimated_cost": null,
+  "source_class": "public_dataset",
+  "raw_source_readonly": true,
+  "note": "Sanitized repository snapshot; queue and result absolute paths are intentionally omitted."
+}
