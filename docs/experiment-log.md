@@ -343,3 +343,22 @@ P50/P95、吞吐、CPU/GPU/内存：
 - 决策：暂不扩大 base 8B 伪标签；先把提示词版本作为候选分支送入相同人工 Gold，对每类分别校准阈值并允许 abstain。只有 Gold 上的 precision/recall 与 worst-group 改善后才晋级 teacher。
 - comparison SHA-256：`657097c15c3f8686470e55e9b03fb685c70686eadb2825c2a14f2952df847802`。
 - 证据：[`teacher-8b-prompt-v2-200-v1/benchmark.json`](../artifacts/experiments/teacher-8b-prompt-v2-200-v1/benchmark.json)、[`teacher-8b-prompt-ablation-200-v1/comparison.json`](../artifacts/experiments/teacher-8b-prompt-ablation-200-v1/comparison.json)。
+
+## EXP-026：预留验证集本地 8B 机器建议
+
+- 数据隔离：使用 EXP-017 的 181 条 validation candidates，181 个独立原视频组；126 条来自旧 OSS 多数据集，55 条来自三批供应商留出集；与训练组无交集。
+- 预解码：181/181 成功，8 帧、448 edge、JPEG quality 82、8 workers；102.54 秒，0.5665 秒/clip，31,325,542 encoded bytes；index SHA-256 `9fdf3ee7e20b13641b682ae8d832c8800f988799df55dfe824f6bf0e4a5aba26`。
+- 推理：181/181 结构化输出有效；H20 BF16，P50/P95 为 0.762/1.408 秒，5.27 video-h/wall-h。
+- 未评分行为：任一问题触发率 27.6%；`task_label_mismatch` 27 条、`action_not_observable` 21 条、`semantic_camera_shake` 2 条；拒答 0，平均报告置信度 0.996。
+- 来源切片：旧 OSS 多数据集触发率 34.1%，供应商留出集 12.7%。该差异可能来自真实质量、任务文本完整度或域偏移，人工 Gold 前不能归因。
+- predictions SHA-256 `787a1cbcf147fed8ab8b03170e68021797a45f9c0f481351bbc0c17a2a678179`；benchmark SHA-256 `f0cd30b4e78b025febacdf39300d43bd108f9d4eb301b4642608b0a17e3aded2`。
+- 证据：[`gold-validation-cache-181-v1/summary.json`](../artifacts/experiments/gold-validation-cache-181-v1/summary.json)、[`gold-validation-teacher-181-v1/benchmark.json`](../artifacts/experiments/gold-validation-teacher-181-v1/benchmark.json)。
+
+## EXP-027：第一批预留 validation 人工复检任务
+
+- 机器建议适配：181/181 prediction 关联成功，0 缺失、0 无效；每条明确 `acceptance_authority=false`、`training_label_authority=false`，人工仲裁前不得训练或计准确率。
+- 媒体派生：181/181 短片生成成功，0 失败，约 865 MB；原始 OSS/CPFS 视频只读。
+- Web 入库：181 条事件幂等导入 PostgreSQL；dataset ID `d90cb883-3459-5670-8a73-cb091a195c4d`，run ID `f5af95ec-00f1-52b2-9e18-88e4b15c925c`。
+- 集成问题：复检生成器输出 JSONL，旧导入器仅接受 JSON 数组，首次导入在解析阶段失败且未部分写库；修复为同时支持 JSON/JSONL并加入回归测试，提交 `4ca3ccd` 后重试成功。
+- review queue SHA-256 `6b01df4d64d1e9b9d38a3e1b7104b43f67e1269ec46f3331881560122815af0f`；review events SHA-256 `493f7dcca307c4b24bc1916d12e7d5fec9d21bef03feb74c20904a0888609c19`。
+- 证据：[`gold-validation-review-prep-181-v1/summary.json`](../artifacts/experiments/gold-validation-review-prep-181-v1/summary.json)、[`gold-validation-review-batch-181-v1/summary.json`](../artifacts/experiments/gold-validation-review-batch-181-v1/summary.json)。

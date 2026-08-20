@@ -1,0 +1,18 @@
+{
+  "schema_version": "egoqc-few-b-frame-cache-v1",
+  "status": "completed",
+  "cached_clips": 181,
+  "target_clips": 181,
+  "resumed_clips": 0,
+  "new_clips": 181,
+  "elapsed_seconds": 102.537985377945,
+  "average_seconds_per_new_clip": 0.5665082065079835,
+  "frame_count": 8,
+  "maximum_edge": 448,
+  "jpeg_quality": 82,
+  "workers": 8,
+  "encoded_bytes": 31325542,
+  "raw_source_readonly": true,
+  "source_paths_stored": false,
+  "index": "/mnt/workspace/egoqc-derived/gold-validation-cache-181-v1/index.jsonl"
+}

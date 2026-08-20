@@ -1,0 +1,24 @@
+{
+  "schema_version": "egoqc-local-vlm-review-queue-v1",
+  "queue": "/mnt/workspace/egoqc-derived/generality-v2/gold-validation-candidates.jsonl",
+  "benchmark_root": "/mnt/workspace/egoqc-derived/gold-validation-teacher-181-v1",
+  "review_requests": 181,
+  "missing_predictions": 0,
+  "invalid_predictions": 0,
+  "source_class_counts": {
+    "unclassified_mounted_dataset": 126,
+    "supplier_dataset": 55
+  },
+  "suggested_task_counts": {
+    "task_label_mismatch": 27,
+    "action_not_observable": 21,
+    "semantic_camera_shake": 2
+  },
+  "probability_threshold": 0.5,
+  "machine_suggestions_are_gold": false,
+  "may_auto_accept_or_reject": false,
+  "may_train_before_human_adjudication": false,
+  "raw_source_readonly": true,
+  "code_version": "0.7.0+src.db12fe214c7646bc",
+  "artifact": "/mnt/workspace/egoqc-derived/gold-validation-review-prep-181-v1/review-queue.jsonl"
+}
