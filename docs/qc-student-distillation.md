@@ -1,4 +1,4 @@
-# EgoQC 视觉质量学生模型
+# EgoQC few-B 视觉质量模型与高速级联
 
 格式、schema、时间戳、SO(3)、帧数、FPS、分辨率等确定性失败始终由规则判定，模型不能
 覆盖规则失败。学生模型仅处理难以公式化的视觉语义，并且在 Gold Set 校准前只能路由到
@@ -55,27 +55,25 @@ egoqc smoke-qc-student \
 ```
 
 当前 smoke student 是轻量 CNN + 双向 GRU + 多标签 head，只验证视频读取、soft target、
-标签 mask、加权 BCE、GPU backward 和 checkpoint。只有 Gold validation 达到每类规定的
+标签 mask、加权 BCE、GPU backward 和 checkpoint；它不是最终几 B 模型。只有 Gold validation 达到每类规定的
 precision、完成概率校准和跨供应商测试后，才能为某个 task 单独开放自动拒收。
 
-生产部署只维护一套 student 权重，机器可读约束见
-[`config/qc_student_deployment_v1.json`](../config/qc_student_deployment_v1.json)。CPU 使用 INT8
-ONNX Runtime/OpenVINO，GPU 使用 FP16 PyTorch/ONNX Runtime/TensorRT；二者必须在同一 Gold
-集合上做输出一致性和决策一致性测试。CPU 默认 24×192 全局帧和 24×160 手部 ROI，GPU
-默认 32×224 全局帧和 32×192 手部 ROI。输入分辨率和帧数可以不同，但 taxonomy、权重、
-概率校准协议和拒答策略必须一致。CPU/GPU profile 可在同一份冻结 validation 上分别选择
-阈值，但阈值必须在 test 前冻结，禁止用 test 重新调参。
+机器可读约束见
+[`config/qc_student_deployment_v1.json`](../config/qc_student_deployment_v1.json)。最终语义质检模型
+以 Qwen3-VL-4B 为首选，2B 是更低延迟候选，8B 是效果上限 challenger；2B/4B 优先做全参数
+SFT，LoRA/QLoRA 只进入适配成本对照。三者使用同一冻结 split、同一 8 帧×448 最大边输入、
+同一结构化输出和同一评估协议，避免用不同采样预算伪造参数规模收益。
 
-QC student 不训练 8B 级通用大模型。默认输入从原始视频在线缩放为 192×192，并采用
-letterbox 保留完整第一视角画面，避免方形中心裁剪删除画面边缘或底部的手；每 4 个已解码帧
-取一帧进入时序层。原始 720p/1080p 始终只读保存，不额外存一份低分辨率视频。生产模型优先
-采用 16M–24M 参数的 MobileNetV4-Hybrid-Medium + Temporal Shift + depthwise TCN 作为
-首选，EfficientFormerV2 和 MoViNet-Stream 作为 challenger，8M MobileNetV3 仅作为低配
-fallback；先冻结编码器训练 head，效果不足再
-逐层解冻。MANO 数值指标、速度、相机运动和规则事件作为低维特征融合，不让视觉网络重复
-学习代码已经能精确计算的内容。
+16M–24M 的 MobileNetV4 + Temporal Shift + depthwise TCN 仍保留，但只作为全量高速 scout：
+它在每个 clip 上运行并输出风险/不确定度，将预计 1%–10% 的高风险、分歧和随机抽检样本送给
+2B/4B VLM。最终模型输出多标签概率、问题时间段、严重度、证据帧与 `abstain`，自由文本解释
+只作为人工证据，不能成为验收真值。百万小时规模默认禁止让几 B 模型扫描所有 clip。
 
-模型“小”不以 checkpoint 文件名判断。每次发布必须同时记录参数量、INT8/FP16 体积、
+CPU 路径采用 INT8 scout，并测量 INT4 2B/4B 作为低频复核器；GPU 路径测量 BF16/FP16
+2B/4B/8B。CPU INT4 是否达到可接受速度、内存和精度目前没有实测，配置中的相关数字保持空值，
+不能写入论文结论。原始 720p/1080p 始终只读保存，在线 letterbox/抽帧，不额外复制低分辨率视频。
+
+模型规模不以 checkpoint 文件名判断。每次发布必须同时记录参数量、INT4/INT8/BF16 体积、
 峰值 RSS/显存、含视频解码的 P50/P95 延迟和 video-hours/wall-hour。若 INT8 相比 FP32 在
 同一阈值口径下 recall 下降超过 1 个百分点，CPU 自动决策保持关闭；若 CPU/GPU 决策分歧
 在相同 canonical 输入上超过 0.1%，先修复预处理、量化或算子差异，不能分别调阈值掩盖

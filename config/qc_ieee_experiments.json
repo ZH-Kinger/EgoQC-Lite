@@ -4,7 +4,7 @@
   "hypotheses": {
     "h1": "Domain-adaptive self-supervised video pretraining improves recall at fixed 99% precision.",
     "h2": "Global video, hand ROI, and kinematic fusion improves worst-group performance over RGB-only models.",
-    "h3": "A multi-expert teacher distilled into a temporal student preserves quality while increasing video-hours per GPU-hour.",
+    "h3": "A compact scout followed by a few-billion-parameter video VLM preserves few-B semantic quality while reducing VLM invocation and human review cost.",
     "h4": "Selective prediction provides higher reliable automation coverage than forced binary classification."
   },
   "data_protocol": {
@@ -53,14 +53,21 @@
   },
   "student_system": {
     "deployment_contract": "config/qc_student_deployment_v1.json",
-    "shared_cpu_gpu_weights": true,
-    "global_stream": {"cpu": {"frames": 24, "resolution": 192}, "gpu": {"frames": 32, "resolution": 224}},
-    "hand_roi_stream": {"cpu": {"frames": 24, "resolution": 160}, "gpu": {"frames": 32, "resolution": 192}},
+    "primary_model": "Qwen/Qwen3-VL-4B-Instruct",
+    "scale_ablation": [
+      "Qwen/Qwen3-VL-2B-Instruct",
+      "Qwen/Qwen3-VL-4B-Instruct",
+      "Qwen/Qwen3-VL-8B-Instruct"
+    ],
+    "training_regime": "full_parameter_sft_primary_lora_and_qlora_baselines",
+    "compact_scout": "16M_to_24M_temporal_visual_router",
+    "shared_base_checkpoint_across_cpu_gpu": true,
+    "vlm_input": {"frames": 8, "maximum_edge": 448, "resize": "letterbox"},
     "kinematic_stream": "masked_numeric_temporal_encoder",
-    "objective": "weighted_asymmetric_multilabel_plus_logit_feature_temporal_distillation",
-    "outputs": ["per_task_probability", "uncertainty", "abstain", "temporal_evidence"],
-    "cpu_runtime": "int8_onnxruntime_or_openvino",
-    "gpu_runtime": "fp16_pytorch_onnxruntime_or_tensorrt"
+    "objective": "structured_multilabel_temporal_sft_plus_confidence_weighted_teacher_distribution",
+    "outputs": ["per_task_probability", "temporal_intervals", "severity", "uncertainty", "abstain", "evidence_frames"],
+    "cpu_runtime": "int8_scout_plus_int4_2b_or_4b_low_rate_verifier",
+    "gpu_runtime": "bf16_or_fp16_2b_4b_8b_video_vlm"
   },
   "experiments": [
     {"id": "E0", "name": "deterministic_rules", "purpose": "non_learned_baseline"},
@@ -70,8 +77,10 @@
     {"id": "E4", "name": "rgb_roi_plus_kinematics", "purpose": "multimodal_fusion_ablation"},
     {"id": "E5", "name": "domain_adaptive_pretraining", "purpose": "unlabeled_ego_data_ablation"},
     {"id": "E6", "name": "multi_expert_teacher_ensemble", "purpose": "accuracy_upper_bound"},
-    {"id": "E7", "name": "distilled_student", "purpose": "accuracy_throughput_pareto"},
-    {"id": "E8", "name": "distilled_student_selective", "purpose": "final_production_system"}
+    {"id": "E7", "name": "qwen3_vl_2b_4b_8b_full_sft", "purpose": "model_scale_accuracy_speed_ablation"},
+    {"id": "E8", "name": "compact_scout_to_few_b_vlm_selective", "purpose": "final_production_accuracy_throughput_pareto"},
+    {"id": "E9", "name": "full_sft_vs_lora_vs_qlora", "purpose": "adaptation_regime_ablation"},
+    {"id": "E10", "name": "cpu_int4_vs_gpu_bf16", "purpose": "runtime_quantization_and_deployment_ablation"}
   ],
   "reporting": {
     "repeat_runs": 3,

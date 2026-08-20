@@ -1,60 +1,112 @@
 {
-  "schema_version": "egoqc-student-deployment-v1",
+  "schema_version": "egoqc-student-deployment-v2",
   "status": "pre_registered_targets_not_measured_results",
-  "objective": "one compact temporal QC student with CPU and GPU execution profiles",
+  "objective": "few-billion-parameter video VLM quality verifier behind a compact high-recall scout",
+  "system_roles": {
+    "deterministic_gate": "schema, codec, timestamp, projection, SO3 and kinematic hard constraints",
+    "compact_scout": "cheap high-recall routing over all clips; never the final semantic judge",
+    "few_b_vlm": "primary multi-label semantic QC, temporal localization, confidence and abstention",
+    "human_review": "Gold labels, uncertain cases and policy-changing decisions"
+  },
   "architecture": {
-    "primary": "mobilenet_v4_hybrid_medium_plus_temporal_shift_and_depthwise_tcn",
-    "fallback": "mobilenet_v3_large_0_75_plus_temporal_shift_and_depthwise_tcn",
-    "challengers": ["efficientformer_v2", "movinet_stream"],
-    "shared_weights_across_backends": true,
+    "compact_scout": {
+      "primary": "mobilenet_v4_hybrid_medium_plus_temporal_shift_and_depthwise_tcn",
+      "fallback": "mobilenet_v3_large_0_75_plus_temporal_shift_and_depthwise_tcn",
+      "preferred_parameter_range": [16000000, 24000000],
+      "maximum_parameters": 24000000,
+      "decision_authority": "route_only"
+    },
+    "primary_vlm": {
+      "preferred": "Qwen/Qwen3-VL-4B-Instruct",
+      "small_candidate": "Qwen/Qwen3-VL-2B-Instruct",
+      "large_challenger": "Qwen/Qwen3-VL-8B-Instruct",
+      "preferred_parameter_scale_b": 4,
+      "candidate_parameter_scales_b": [2, 4, 8],
+      "training_primary": "full_parameter_sft",
+      "lora_role": "efficiency_baseline_only",
+      "structured_output_only": true,
+      "free_form_reason_is_training_target": false
+    },
+    "shared_base_checkpoint_across_cpu_gpu": true,
     "global_rgb_stream": true,
-    "shared_hand_roi_encoder": true,
+    "optional_hand_roi_stream": true,
     "masked_kinematic_feature_branch": true,
-    "rules_remain_external_deterministic_features": true,
-    "language_generation_head": false,
-    "preferred_parameter_range": [16000000, 24000000],
-    "maximum_parameters": 24000000
+    "rules_remain_external_deterministic_features": true
   },
   "input_contract": {
-    "clip_duration_s": 8.0,
+    "clip_duration_s": [4.0, 8.0],
+    "vlm_comparison_frames": 8,
+    "vlm_comparison_max_edge": 448,
     "resize_mode": "letterbox_preserve_full_ego_fov",
     "optional_modalities_use_explicit_masks": true,
     "source_video_remains_readonly": true,
-    "precomputed_low_resolution_video_required": false
+    "precomputed_low_resolution_video_required": false,
+    "same_canonical_frames_for_2b_4b_8b_comparison": true
+  },
+  "output_contract": {
+    "format": "strict_json",
+    "fields": [
+      "task_probabilities",
+      "temporal_intervals",
+      "severity",
+      "confidence",
+      "abstain",
+      "evidence_frame_indices"
+    ],
+    "taxonomy_version_required": true,
+    "natural_language_reason_optional_evidence_only": true
   },
   "profiles": {
-    "cpu_int8": {
+    "cpu_scout_int8": {
+      "model_role": "compact_scout",
       "global_frames": 24,
       "global_resolution": 192,
-      "hand_roi_frames": 24,
-      "hand_roi_resolution": 160,
       "precision": "int8_qat_or_calibrated_ptq",
       "runtimes": ["onnxruntime_cpu", "openvino_cpu"],
-      "maximum_artifact_mb": 32,
-      "batching": "batch_1_or_small_dynamic_batch",
-      "benchmark_hardware_id_required": true,
-      "minimum_video_hours_per_wall_hour": null
+      "batching": "batch_1_or_small_dynamic_batch"
     },
-    "gpu_fp16": {
-      "global_frames": 32,
-      "global_resolution": 224,
-      "hand_roi_frames": 32,
-      "hand_roi_resolution": 192,
-      "precision": "fp16",
-      "runtimes": ["pytorch_cuda", "onnxruntime_cuda", "tensorrt"],
-      "maximum_artifact_mb": 56,
-      "batching": "dynamic_batch_from_memory_budget",
-      "benchmark_hardware_id_required": true,
-      "minimum_video_hours_per_wall_hour": null
+    "cpu_vlm_int4": {
+      "model_role": "few_b_vlm",
+      "candidate_scales_b": [2, 4],
+      "precision": "weight_only_int4_or_runtime_supported_int4",
+      "runtime": "selected_by_measured_compatibility",
+      "purpose": "low_rate_verification_and_offline_review_not_full_stream_default",
+      "artifact_mb": null,
+      "peak_rss_mb": null,
+      "video_hours_per_wall_hour": null
+    },
+    "gpu_vlm_bf16": {
+      "model_role": "few_b_vlm",
+      "candidate_scales_b": [2, 4, 8],
+      "precision": "bf16_or_fp16",
+      "runtimes": ["pytorch_transformers", "vllm_when_video_model_supported"],
+      "batching": "continuous_or_dynamic_batch_from_memory_budget",
+      "peak_vram_mb": null,
+      "video_hours_per_wall_hour": null
     }
   },
-  "distillation": {
+  "routing": {
+    "full_stream_order": ["deterministic_gate", "compact_scout", "few_b_vlm", "human_review"],
+    "vlm_default_target_fraction": [0.01, 0.10],
+    "route_to_vlm_if": [
+      "scout_risk_above_threshold",
+      "scout_uncertainty_inside_abstention_band",
+      "deterministic_and_visual_evidence_disagree",
+      "random_audit_sample"
+    ],
+    "thresholds_selected_on_frozen_validation": true,
+    "million_hour_default_forbids_vlm_on_every_clip": true
+  },
+  "training": {
     "teacher_is_offline_only": true,
     "teacher_outputs_are_train_only_weak_labels": true,
     "human_gold_required_for_validation_and_test": true,
+    "primary_regime": "full_parameter_supervised_fine_tuning_for_2b_and_4b",
+    "large_challenger_regime": "full_parameter_sft_with_fsdp_or_zero3_when_resources_allow",
+    "efficiency_baselines": ["lora", "qlora"],
     "losses": [
       "asymmetric_multilabel_gold_loss",
-      "confidence_weighted_teacher_logit_loss",
+      "confidence_weighted_teacher_distribution_loss",
       "temporal_boundary_loss",
       "cross_modal_consistency_loss",
       "selective_risk_calibration_loss"
@@ -64,8 +116,7 @@
     "primary_metric": "recall_at_validation_selected_precision",
     "auto_action_precision_95_ci_lower_bound": 0.99,
     "minimum_auto_decisions_if_zero_observed_errors": 381,
-    "cpu_maximum_recall_drop_vs_fp32_percentage_points": 1.0,
-    "gpu_maximum_recall_drop_vs_fp32_percentage_points": 0.3,
+    "quantized_maximum_recall_drop_vs_bf16_percentage_points": 1.0,
     "maximum_backend_decision_disagreement_rate_on_identical_inputs": 0.001,
     "profile_specific_thresholds_selected_on_same_frozen_validation": true,
     "threshold_reselection_on_test_forbidden": true,
@@ -73,20 +124,36 @@
     "abstention_required": true,
     "forced_binary_decision": false
   },
+  "ablation_matrix": [
+    "deterministic_rules_only",
+    "compact_scout_only",
+    "qwen3_vl_2b_only",
+    "qwen3_vl_4b_only",
+    "qwen3_vl_8b_only",
+    "compact_scout_to_qwen3_vl_2b",
+    "compact_scout_to_qwen3_vl_4b"
+  ],
   "benchmark_contract": {
+    "same_frozen_data_partition": true,
+    "same_vlm_frame_budget": true,
     "include_video_decode_and_resize": true,
+    "also_report_model_only_latency": true,
     "warmup_iterations": 20,
     "measured_iterations": 200,
     "report": [
+      "checkpoint_and_dataset_sha256",
       "artifact_mb",
       "parameters",
-      "peak_rss_mb",
+      "peak_rss_or_vram_mb",
       "p50_latency_ms",
       "p95_latency_ms",
       "video_hours_per_wall_hour",
-      "energy_if_available",
+      "vlm_routing_fraction",
+      "human_review_fraction",
       "per_task_metrics",
-      "risk_coverage_curve"
+      "worst_source_metrics",
+      "risk_coverage_curve",
+      "error_images_and_clips"
     ],
     "runtime_parity_test_required": true,
     "runtime_parity_uses_identical_canonical_input": true

@@ -41,6 +41,7 @@ from .distillation import (
     smoke_train_qc_student,
 )
 from .research_evaluation import evaluate_qc_research_protocol
+from .model_ablation import plan_model_ablation
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
@@ -362,6 +363,20 @@ def main() -> None:
     research_eval.add_argument("--bootstrap-replicates", type=int, default=1000)
     research_eval.add_argument("--minimum-group-samples", type=int, default=30)
     research_eval.add_argument("--seed", type=int, default=20260819)
+    model_ablation = sub.add_parser(
+        "plan-model-ablation",
+        help="冻结 20M/2B/4B/8B 与级联的准确率、速度和资源对照实验",
+    )
+    model_ablation.add_argument("--train-manifest", type=Path, required=True)
+    model_ablation.add_argument("--validation-gold", type=Path, required=True)
+    model_ablation.add_argument("--test-gold", type=Path, required=True)
+    model_ablation.add_argument(
+        "--deployment-config",
+        type=Path,
+        default=Path("config/qc_student_deployment_v1.json"),
+    )
+    model_ablation.add_argument("--output", type=Path, required=True)
+    model_ablation.add_argument("--seed", type=int, action="append", dest="seeds")
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -1037,6 +1052,16 @@ def main() -> None:
             bootstrap_replicates=args.bootstrap_replicates,
             minimum_group_samples=args.minimum_group_samples,
             seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "plan-model-ablation":
+        summary = plan_model_ablation(
+            args.train_manifest,
+            args.validation_gold,
+            args.test_gold,
+            args.deployment_config,
+            args.output,
+            seeds=args.seeds or (17, 31, 47),
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":

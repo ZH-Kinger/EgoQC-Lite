@@ -83,7 +83,7 @@ exact hashes and perceptual hashes should precede embeddings.
 
 ## Teacher/student decision
 
-A general VLM is optional and offline. The planned student is a small temporal
+A few-billion-parameter video VLM is the primary semantic QC student. A small temporal
 overlay-alignment classifier trained mostly from programmatic corruptions:
 
 - video/pose offsets;
