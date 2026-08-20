@@ -1,0 +1,89 @@
+{
+  "schema_version": "egoqc-student-deployment-v1",
+  "status": "pre_registered_targets_not_measured_results",
+  "objective": "one compact temporal QC student with CPU and GPU execution profiles",
+  "architecture": {
+    "primary": "mobilenet_v3_large_0_75_plus_temporal_shift_and_depthwise_tcn",
+    "challenger": "movinet_a0_stream",
+    "shared_weights_across_backends": true,
+    "global_rgb_stream": true,
+    "shared_hand_roi_encoder": true,
+    "masked_kinematic_feature_branch": true,
+    "rules_remain_external_deterministic_features": true,
+    "language_generation_head": false,
+    "maximum_parameters": 8000000
+  },
+  "input_contract": {
+    "clip_duration_s": 8.0,
+    "resize_mode": "letterbox_preserve_full_ego_fov",
+    "optional_modalities_use_explicit_masks": true,
+    "source_video_remains_readonly": true,
+    "precomputed_low_resolution_video_required": false
+  },
+  "profiles": {
+    "cpu_int8": {
+      "global_frames": 16,
+      "global_resolution": 160,
+      "hand_roi_frames": 16,
+      "hand_roi_resolution": 128,
+      "precision": "int8_qat_or_calibrated_ptq",
+      "runtimes": ["onnxruntime_cpu", "openvino_cpu"],
+      "maximum_artifact_mb": 12,
+      "batching": "batch_1_or_small_dynamic_batch",
+      "benchmark_hardware_id_required": true,
+      "minimum_video_hours_per_wall_hour": null
+    },
+    "gpu_fp16": {
+      "global_frames": 32,
+      "global_resolution": 224,
+      "hand_roi_frames": 32,
+      "hand_roi_resolution": 160,
+      "precision": "fp16",
+      "runtimes": ["pytorch_cuda", "onnxruntime_cuda", "tensorrt"],
+      "maximum_artifact_mb": 20,
+      "batching": "dynamic_batch_from_memory_budget",
+      "benchmark_hardware_id_required": true,
+      "minimum_video_hours_per_wall_hour": null
+    }
+  },
+  "distillation": {
+    "teacher_is_offline_only": true,
+    "teacher_outputs_are_train_only_weak_labels": true,
+    "human_gold_required_for_validation_and_test": true,
+    "losses": [
+      "asymmetric_multilabel_gold_loss",
+      "confidence_weighted_teacher_logit_loss",
+      "temporal_boundary_loss",
+      "cross_modal_consistency_loss",
+      "selective_risk_calibration_loss"
+    ]
+  },
+  "accuracy_gates": {
+    "primary_metric": "recall_at_validation_selected_precision",
+    "auto_action_precision_95_ci_lower_bound": 0.99,
+    "minimum_auto_decisions_if_zero_observed_errors": 381,
+    "cpu_maximum_recall_drop_vs_fp32_percentage_points": 1.0,
+    "gpu_maximum_recall_drop_vs_fp32_percentage_points": 0.3,
+    "maximum_cpu_gpu_decision_disagreement_rate": 0.001,
+    "per_task_and_worst_source_reporting_required": true,
+    "abstention_required": true,
+    "forced_binary_decision": false
+  },
+  "benchmark_contract": {
+    "include_video_decode_and_resize": true,
+    "warmup_iterations": 20,
+    "measured_iterations": 200,
+    "report": [
+      "artifact_mb",
+      "parameters",
+      "peak_rss_mb",
+      "p50_latency_ms",
+      "p95_latency_ms",
+      "video_hours_per_wall_hour",
+      "energy_if_available",
+      "per_task_metrics",
+      "risk_coverage_curve"
+    ],
+    "runtime_parity_test_required": true
+  }
+}
