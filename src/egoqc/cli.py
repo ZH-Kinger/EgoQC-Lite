@@ -398,6 +398,11 @@ def main() -> None:
     )
     few_b_benchmark.add_argument("--max-new-tokens", type=int, default=256)
     few_b_benchmark.add_argument("--seed", type=int, default=17)
+    few_b_benchmark.add_argument(
+        "--selection-strategy",
+        choices=("stable_random", "balanced_weak"),
+        default="stable_random",
+    )
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -1099,6 +1104,7 @@ def main() -> None:
             precision=args.precision,
             max_new_tokens=args.max_new_tokens,
             seed=args.seed,
+            selection_strategy=args.selection_strategy,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":

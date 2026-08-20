@@ -29,7 +29,10 @@ def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
 
 
 def select_benchmark_rows(
-    rows: Sequence[Dict[str, Any]], maximum_clips: int, seed: int
+    rows: Sequence[Dict[str, Any]],
+    maximum_clips: int,
+    seed: int,
+    strategy: str = "stable_random",
 ) -> List[Dict[str, Any]]:
     if maximum_clips <= 0:
         raise ValueError("maximum_clips must be positive")
@@ -38,12 +41,32 @@ def select_benchmark_rows(
         identity = str(row.get("record_id") or row.get("video_id") or row.get("source_uri") or "")
         return hashlib.sha256(f"{seed}:{identity}".encode("utf-8")).hexdigest()
 
+    if strategy not in {"stable_random", "balanced_weak"}:
+        raise ValueError("strategy must be stable_random or balanced_weak")
     usable = [
         row
         for row in rows
         if row.get("source_uri") and Path(str(row["source_uri"])).expanduser().is_file()
     ]
-    return sorted(usable, key=rank)[:maximum_clips]
+    if strategy == "stable_random":
+        return sorted(usable, key=rank)[:maximum_clips]
+    positives = []
+    negatives = []
+    for row in usable:
+        targets = (row.get("distillation") or {}).get("targets") or {}
+        if any(float(value) >= 0.5 for value in targets.values()):
+            positives.append(row)
+        else:
+            negatives.append(row)
+    positive_limit = (maximum_clips + 1) // 2
+    negative_limit = maximum_clips // 2
+    selected = sorted(positives, key=rank)[:positive_limit]
+    selected.extend(sorted(negatives, key=rank)[:negative_limit])
+    if len(selected) < maximum_clips:
+        selected_ids = {id(row) for row in selected}
+        remainder = [row for row in usable if id(row) not in selected_ids]
+        selected.extend(sorted(remainder, key=rank)[: maximum_clips - len(selected)])
+    return selected
 
 
 def _clip_window(row: Dict[str, Any]) -> Tuple[float, float]:
@@ -249,6 +272,7 @@ def benchmark_few_b_vlm(
     precision: str = "bf16",
     max_new_tokens: int = 256,
     seed: int = 17,
+    selection_strategy: str = "stable_random",
 ) -> Dict[str, Any]:
     """Run a small, fully traced inference benchmark. It never computes accuracy."""
 
@@ -274,7 +298,9 @@ def benchmark_few_b_vlm(
     model_path = model_path.expanduser().resolve()
     output = output.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
-    rows = select_benchmark_rows(_read_jsonl(manifest), maximum_clips, seed)
+    rows = select_benchmark_rows(
+        _read_jsonl(manifest), maximum_clips, seed, strategy=selection_strategy
+    )
     if not rows:
         raise ValueError("manifest has no locally readable source_uri rows")
     task_config = json.loads(task_config_path.expanduser().read_text(encoding="utf-8"))
@@ -417,6 +443,7 @@ def benchmark_few_b_vlm(
             "frame_count": frame_count,
             "maximum_edge": maximum_edge,
             "selection_seed": seed,
+            "selection_strategy": selection_strategy,
             "maximum_clips": maximum_clips,
             "max_new_tokens": max_new_tokens,
             "wire_output_schema": "compact_sparse_findings_v1",

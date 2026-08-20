@@ -41,3 +41,22 @@ def test_normalize_sparse_findings_maps_indices_and_preserves_codes() -> None:
     assert error is None
     assert normalized["f"][0][0] == "second"
     assert normalized["f"][1][0] == "first"
+
+
+def test_balanced_weak_selection_uses_positive_and_negative_rows(tmp_path: Path) -> None:
+    rows = []
+    for index in range(8):
+        path = tmp_path / f"balanced-{index}.mp4"
+        path.write_bytes(b"video")
+        rows.append(
+            {
+                "video_id": f"v{index}",
+                "source_uri": str(path),
+                "distillation": {"targets": {"issue": 0.9 if index < 4 else 0.0}},
+            }
+        )
+    selected = select_benchmark_rows(rows, 6, 17, strategy="balanced_weak")
+    positives = sum(
+        row["distillation"]["targets"]["issue"] >= 0.5 for row in selected
+    )
+    assert positives == 3
