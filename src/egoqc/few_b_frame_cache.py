@@ -167,6 +167,7 @@ def predecode_few_b_frame_cache(
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
         )
+    total_elapsed = time.perf_counter() - started
     total_bytes = sum(int(row.get("encoded_bytes") or 0) for row in records)
     summary = {
         "schema_version": SCHEMA_VERSION,
@@ -175,6 +176,10 @@ def predecode_few_b_frame_cache(
         "target_clips": len(rows),
         "resumed_clips": len(existing),
         "new_clips": new_records,
+        "elapsed_seconds": total_elapsed,
+        "average_seconds_per_new_clip": (
+            total_elapsed / new_records if new_records else None
+        ),
         "frame_count": frame_count,
         "maximum_edge": maximum_edge,
         "jpeg_quality": jpeg_quality,

@@ -18,8 +18,9 @@
 |---|---:|---|
 | 可访问数据毛量 | 约 2,532.25 小时 | 1,008.32 小时为 metadata 精确值，另有 1,523.93 小时为抽样估计；尚未跨源去重 |
 | 已冻结 few-B 对照样本 | 200 clips | 100 个弱正例、100 个弱负例，200 个独立 split group |
-| 供应商本地 8B partial | 386 / 434 clips | 全部 386 条为有效结构化 JSON；任务已停止，可断点续跑 |
-| 已准备弱/合成训练记录 | 10,018 | 只能进入 train，不能进入 validation/test |
+| 供应商本地 8B | 434 / 434 clips | 434 条结构化 JSON 全部有效；最终结果 SHA-256 已记录 |
+| 新增本地弱标签池 | 434 | 206 条高置信 train-only；228 条进入人工复检 |
+| 已准备弱/合成训练记录 | 10,018 + 434 | 只能进入 train，不能进入 validation/test；需去重后统计最终量 |
 | 人工 Gold | 0 | 正式准确率、99% precision 和自动拒收均未解锁 |
 | 外部供应商 API 调用 | 0 | 434 条供应商候选未发送给外部 API |
 
@@ -175,11 +176,49 @@
 - 验证：166 项测试通过；提交 `5ca1cc1`。
 - 结论：没有发现 raw 文件被本项目修改。后续恢复实验必须使用含硬保护的新进程。
 
+## EXP-013：候选 clip 预解码热缓存
+
+- 日期：2026-08-20。
+- 目标：避免 few-B 容量实验和后续 SFT 反复从挂载视频随机 seek，同时不复制整段原视频。
+- 协议：434 个独立 clip，每条均匀 8 帧，最长边 448，JPEG quality 82，8 个解码 workers；
+  缓存只写入 workspace，index 不保存 raw 路径。
+- 结果：434/434 缓存成功，共 3,472 帧；JPEG payload 71,878,578 bytes，目录占用约 82 MB；
+  index SHA-256 为 `37d06820fec9d8e21641aa09f2d54d012ed4ccd3a28d3c7ba21c5adcb3d9dc9d`。
+- 性能：414 条检查点时平均 0.463 秒/clip；首版最终 summary 漏记最终 elapsed，因此不伪造最终均值。
+- 遇到的问题：启动时 `tee` 在 CLI 创建输出目录之前打开日志，导致 shell 日志未建立；内部
+  `progress.json/index.jsonl` 不受影响。首版 summary 只保存容量，没有保存最终 elapsed。
+- 解决：依赖原子滚动 progress/index 而不是 shell log 恢复；代码补充最终
+  `elapsed_seconds/average_seconds_per_new_clip`；未来 runner 在启动前创建日志父目录。
+- 缓存一致性：key 绑定 clip ID、起止时间、frame count、分辨率、JPEG 参数、raw 路径哈希以及
+  device/inode/size/mtime；任一变化都使缓存失效。`--require-frame-cache` 禁止静默回退 raw 解码。
+- 结论边界：这是派生热缓存，不是新标注，也不改变 raw 或验收结论。
+- 证据：[`supplier434-frame-cache-v1/summary.json`](../artifacts/experiments/few-b-v2/supplier434-frame-cache-v1/summary.json)。
+- 对应提交：`c1f58db`。
+
+## EXP-014：供应商 434 条本地 8B 完成与弱标签分流
+
+- 日期：2026-08-20。
+- 恢复协议：从 386 条断点继续；剩余 48 条强制从 EXP-013 帧缓存读取；BF16 H20，8×448。
+- 结果：434/434 成功，434/434 结构化 JSON 有效；最终 predictions SHA-256 为
+  `ad72d8943cc2b1c941c3d043cbab6fbd3a093acf7d01ecde7151a925f2191673`。
+- 缓存阶段性能：48 条在 38.57 秒 wall time 内完成，平均进度约 0.825 秒/clip，处理吞吐
+  6.33 video-h/wall-h；较最初 6.565 秒/clip 约快 8 倍。模型权重指纹仍额外耗时 15.08 秒，
+  模型加载耗时 4.53 秒，尚未缓存。
+- 训练治理结果：434 条进入 train-only all pool；其中 206 条进入 high-confidence view；228 条
+  因规则/模型分歧进入人工复检；0 跳过、0 重复。强正例以 `action_not_observable` 为主，说明
+  base 8B 的标签分布仍偏置，不能直接当 Gold。
+- 文件 SHA-256：all pool
+  `2be3f3f41bb002200f2b6f30afb623bf80f80800b6371a8114a12365b23ef8f5`；high-confidence
+  `03df268219cfd9c886d5400c33aba115ba80be7d1c02ce0fafad99c0a1c43a1d`；human-review
+  `45a36f2e0a1deb128881bcba9df80f0d70ec369f927bb22f783860aea1d378d7`。
+- 结论边界：206 条只是高置信弱标签；228 条必须人工判断；任何一条都不能进入正式 test Gold。
+- 证据：[`supplier434-complete-v1/summary.json`](../artifacts/experiments/few-b-v2/supplier434-complete-v1/summary.json)。
+
 ## 已知未解决问题与下一步
 
 1. 完成人工 Gold：每类至少覆盖正/负例、双人独立标注和第三人仲裁；按原视频/person/session/
    supplier 分组切分。
-2. 续跑剩余约 48 条本地 8B 候选，然后执行本地弱标签池转换；不得把 partial 直接当训练 Gold。
+2. 在 Web 面板人工复检 228 条规则/模型分歧，并从中建立第一批跨来源 Gold；不得把弱标签直接当 Gold。
 3. 对 2B/4B/8B 做同一 Gold validation/test 的 SFT 对照；报告 99% precision 下 recall、置信区间和 worst-group。
 4. 补 2B/4B 的 CPU INT8/INT4 与 GPU BF16/INT8 对照；模型指纹应缓存，避免每次 resume 重算约 15 秒。
 5. 为百万小时部署增加 shard 级 NVMe 热缓存、解码队列背压、worker 心跳和孤儿进程回收。

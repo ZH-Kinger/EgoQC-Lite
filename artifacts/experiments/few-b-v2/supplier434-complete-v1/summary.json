@@ -1,0 +1,40 @@
+{
+  "schema_version": "egoqc-local-8b-completion-evidence-v1",
+  "experiment_id": "supplier434-complete-v1",
+  "status": "completed",
+  "model_id": "Qwen/Qwen3-VL-8B-Instruct",
+  "clips": 434,
+  "structured_json_valid_clips": 434,
+  "predictions_sha256": "ad72d8943cc2b1c941c3d043cbab6fbd3a093acf7d01ecde7151a925f2191673",
+  "cached_completion": {
+    "resumed_clips": 386,
+    "new_clips": 48,
+    "wall_seconds": 38.57021456491202,
+    "video_seconds": 244.26533372433545,
+    "video_hours_per_wall_hour": 6.333004274924303,
+    "model_fingerprint_seconds": 15.075640664901584,
+    "model_load_seconds": 4.533869233215228,
+    "frame_cache_required": true
+  },
+  "training_pool": {
+    "records": 434,
+    "high_confidence_records": 206,
+    "human_review_records": 228,
+    "duplicate_prediction_ids": 0,
+    "skipped": 0,
+    "quality_bands": {
+      "strong_positive": 127,
+      "deterministic_model_disagreement": 228,
+      "strong_negative": 79
+    },
+    "sha256": {
+      "all": "2be3f3f41bb002200f2b6f30afb623bf80f80800b6371a8114a12365b23ef8f5",
+      "high_confidence": "03df268219cfd9c886d5400c33aba115ba80be7d1c02ce0fafad99c0a1c43a1d",
+      "human_review": "45a36f2e0a1deb128881bcba9df80f0d70ec369f927bb22f783860aea1d378d7"
+    }
+  },
+  "raw_source_readonly": true,
+  "external_api_called": false,
+  "formal_accuracy_measured": false,
+  "claim_boundary": "All model labels are weak and train-only; human Gold remains required for evaluation."
+}

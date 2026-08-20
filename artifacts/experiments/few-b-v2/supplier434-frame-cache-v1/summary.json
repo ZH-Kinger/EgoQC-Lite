@@ -1,0 +1,23 @@
+{
+  "schema_version": "egoqc-few-b-frame-cache-evidence-v1",
+  "experiment_id": "supplier434-frame-cache-v1",
+  "status": "completed",
+  "cached_clips": 434,
+  "cached_frames": 3472,
+  "frame_count": 8,
+  "maximum_edge": 448,
+  "jpeg_quality": 82,
+  "workers": 8,
+  "encoded_bytes": 71878578,
+  "directory_size_mib_approx": 82,
+  "index_sha256": "37d06820fec9d8e21641aa09f2d54d012ed4ccd3a28d3c7ba21c5adcb3d9dc9d",
+  "checkpoint_414": {
+    "elapsed_seconds": 191.75110885105096,
+    "average_seconds_per_new_clip": 0.4631669295919105
+  },
+  "final_elapsed_missing_in_first_version": true,
+  "raw_source_readonly": true,
+  "source_paths_stored": false,
+  "external_api_called": false,
+  "claim_boundary": "Derived reusable frames only; not annotations or acceptance truth."
+}
