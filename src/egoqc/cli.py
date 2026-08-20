@@ -59,6 +59,7 @@ from .generality_cohort import build_egodex_systems_cohort, plan_generality_coho
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
 from .local_vlm_training_pool import build_local_vlm_training_pool
+from .local_vlm_review import prepare_local_vlm_review_queue
 from .synthetic_qc import build_synthetic_qc_training
 from .interventions import plan_qc_interventions, run_qc_interventions
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
@@ -484,6 +485,14 @@ def main() -> None:
     prompt_compare.add_argument("--candidate-root", type=Path, required=True)
     prompt_compare.add_argument("--output", type=Path, required=True)
     prompt_compare.add_argument("--threshold", type=float, default=0.5)
+    local_review = sub.add_parser(
+        "prepare-local-vlm-review",
+        help="把本地 VLM 未评分预测附加到预留验证候选，供人工独立复检",
+    )
+    local_review.add_argument("--queue", type=Path, required=True)
+    local_review.add_argument("--benchmark-root", type=Path, required=True)
+    local_review.add_argument("--output", type=Path, required=True)
+    local_review.add_argument("--threshold", type=float, default=0.5)
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -1286,6 +1295,14 @@ def main() -> None:
             args.candidate_root,
             args.output,
             threshold=args.threshold,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "prepare-local-vlm-review":
+        summary = prepare_local_vlm_review_queue(
+            args.queue,
+            args.benchmark_root,
+            args.output,
+            probability_threshold=args.threshold,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":
