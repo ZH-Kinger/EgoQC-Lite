@@ -311,15 +311,35 @@ P50/P95、吞吐、CPU/GPU/内存：
 
 ## EXP-023：12k train-only 惰性视觉干预
 
-- 生成 12,000 条计划，覆盖 855 个训练视频组；11 类干预每类约 1,090 条。
-- 覆盖任务：画质、冻结帧、交互缺失、子任务边界、相机抖动、镜头伪影、遮挡、动作不可观察、任务文本错配、MANO overlay 漂移。
+- 首版错误地把 raw RGB 当作存在 MANO overlay，并计划了 `overlay_translation`；该版本保留为失败记录，禁止训练。
+- 修正版按输入能力门控，生成 12,000 条计划，覆盖 855 个训练视频组；10 类可执行干预各 1,200 条。
+- 覆盖任务：画质、冻结帧、交互缺失、子任务边界、相机抖动、镜头伪影、遮挡、动作不可观察和任务文本错配。
+- `mano_overlay_drift` 只有存在真实 MANO 骨骼或 mesh 叠加时才可生成；本批 raw RGB 因能力缺失被明确列为 unavailable。
 - `hand_absent`、`persistent_extra_hands`、`scene_task_out_of_scope` 禁止用不可靠合成替代，必须来自真实样本。
 - 计划为缓存帧上的 lazy transform，物化图片数 0；synthetic 永远不是 Gold。
-- manifest SHA-256：`9ab70c3e864195b6cbd20311721085a9f01eb448bfc64fd4e5299ffa8d0f18b6`。
+- 修正版 manifest SHA-256：`4bd9c4322d39972a50c23e80c7a610a453a45d03d45146339d6afed3a7c1e9d2`。
+- 证据：[`train-visual-interventions-12k-v2/summary.json`](../artifacts/experiments/train-visual-interventions-12k-v2/summary.json)。
 
 ## EXP-024：新来源本地 8B teacher pilot
 
-- 状态：运行中；1,000 clips，全部要求命中 frame cache，不调用外部 API。
-- 早期 245 条观察：`action_not_observable` 在规则异常/控制上的触发率约 20.3%/15.5%；`severe_lens_artifact` 约 4.8%/6.9%；模型总体置信度约 0.995，拒答为 0。
+- 状态：完成；1,000/1,000 clips 成功且结构化 JSON 有效，全部命中 frame cache，不调用外部 API。
+- 性能：H20 BF16 占用约 17.0 GB 峰值显存；排除模型加载后 915.90 秒，5.85 video-h/wall-h；P50/P95 为 0.791/1.498 秒。
+- 视觉触发：规则异常/控制片段任一视觉问题触发率为 29.4%/22.1%；`action_not_observable` 为 19.6%/16.2%；拒答为 0。
+- 来源差异：三批供应商任一视觉问题触发率分别为 31.6%、6.1%、43.7%，说明存在显著域偏移或采集条件差异。
+- 校准问题：总体报告置信度均值 0.994、median 1.0；高置信不能解释为高准确率。
 - 解释：规则速度异常并不一定能从 8 帧 RGB 观察；同时原始模型置信度明显未校准。两种标签不能直接互相覆盖。
-- 治理：8B 输出暂为 unscored prediction；完成后只作为 teacher-silver 候选，必须经过 Gold 校准、规则分歧路由和人工复检。
+- 实现缺陷：本版未读取 LeRobot `tasks` 列表，活动文本退化为 unknown；raw RGB prompt 还错误列出了 MANO overlay 漂移任务。因此该批只作为旧提示词基线，不直接生成训练标签。
+- predictions SHA-256：`f10f8908e3573fb0eed51c8e2140bebd63958afd3dbb819de76d203be91c5f21`；benchmark SHA-256：`5ac8aa3a719992ce6af9037ed88f1c238403456c593ad73812b7004edf4b94d8`。
+- 证据：[`teacher-8b-1000-v1/benchmark.json`](../artifacts/experiments/teacher-8b-1000-v1/benchmark.json)。
+
+## EXP-025：能力门控提示词配对实验
+
+- 研究问题：读取真实任务文本并禁止 raw RGB 臆测 MANO overlay 后，同一个 8B base 模型的输出行为如何变化。
+- 配对协议：从 EXP-024 的 1,000 条中确定性选择严格子集 200 条；clip ID 交集 200/200，8 帧、448 edge、BF16、seed 79 完全一致。
+- 新版结果：200/200 成功，P50/P95 为 0.827/1.468 秒，5.28 video-h/wall-h；预测 SHA-256 `b4754cda4c1778089f0d9b5b17c60ae868a05ad51c79766de62056f3ab8b34dd`。
+- 行为变化：任一问题触发率从 24.5% 升至 41.5%；74/200（37%）任务集合改变，62/200（31%）是否有问题的结论翻转。
+- 新能力：`task_label_mismatch` 从 0 增至 21/200，说明真实任务文本开始参与判断；`severe_lens_artifact` 从 9 降至 0，MANO overlay 漂移保持 0。
+- 风险：控制片段任一问题触发率从 20.4% 升至 42.9%，`action_not_observable` 从 12.2% 升至 32.7%；拒答仍为 0，置信度均值仍为 0.993。新版更敏感，但没有证据证明更准确。
+- 决策：暂不扩大 base 8B 伪标签；先把提示词版本作为候选分支送入相同人工 Gold，对每类分别校准阈值并允许 abstain。只有 Gold 上的 precision/recall 与 worst-group 改善后才晋级 teacher。
+- comparison SHA-256：`657097c15c3f8686470e55e9b03fb685c70686eadb2825c2a14f2952df847802`。
+- 证据：[`teacher-8b-prompt-v2-200-v1/benchmark.json`](../artifacts/experiments/teacher-8b-prompt-v2-200-v1/benchmark.json)、[`teacher-8b-prompt-ablation-200-v1/comparison.json`](../artifacts/experiments/teacher-8b-prompt-ablation-200-v1/comparison.json)。

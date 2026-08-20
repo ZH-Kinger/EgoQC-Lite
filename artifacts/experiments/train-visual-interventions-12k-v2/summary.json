@@ -1,0 +1,47 @@
+{
+  "schema_version": "egoqc-lazy-visual-intervention-plan-v1",
+  "source_records": 30000,
+  "selected_source_records": 12000,
+  "interventions": 12000,
+  "source_split_groups": 855,
+  "counts_by_family": {
+    "boundary_shift": 1200,
+    "central_occlusion": 1200,
+    "exposure_shift": 1200,
+    "frame_freeze": 1200,
+    "gaussian_blur": 1200,
+    "homography_jitter": 1200,
+    "jpeg_recompression": 1200,
+    "radial_distortion": 1200,
+    "task_text_swap": 1200,
+    "temporal_drop": 1200
+  },
+  "unavailable_families": [
+    "overlay_translation"
+  ],
+  "target_task_counts": {
+    "subtask_boundary_error": 1200,
+    "severe_occlusion": 1200,
+    "action_not_observable": 1200,
+    "unusable_visual_quality": 3600,
+    "frozen_or_duplicate_frames": 1200,
+    "semantic_camera_shake": 1200,
+    "severe_lens_artifact": 1200,
+    "task_label_mismatch": 1200,
+    "interaction_incomplete": 1200
+  },
+  "real_only_tasks": [
+    "hand_absent",
+    "persistent_extra_hands",
+    "scene_task_out_of_scope"
+  ],
+  "capability_required_tasks": {
+    "mano_overlay_drift": "mano_overlay"
+  },
+  "lazy_on_cached_frames": true,
+  "materialized_images": 0,
+  "synthetic_is_not_gold": true,
+  "raw_source_readonly": true,
+  "code_version": "0.7.0+src.22f0a9aec274f827",
+  "artifact": "/mnt/workspace/egoqc-derived/train-visual-interventions-12k-v2/visual-interventions.jsonl"
+}

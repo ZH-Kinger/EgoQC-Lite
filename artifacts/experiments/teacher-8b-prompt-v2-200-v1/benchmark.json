@@ -1,0 +1,86 @@
+{
+  "schema_version": "egoqc-few-b-vlm-benchmark-v1",
+  "created_at": "2026-08-20T08:36:56.653564+00:00",
+  "status": "preliminary_speed_and_structured_output_only",
+  "accuracy_measured": false,
+  "accuracy_claim_authorized": false,
+  "model_id": "Qwen3-VL-8B-Instruct-capability-v2",
+  "model_path_sha256": "0cc2c0f8be65d65a09d0d2578b1cbf301851c66c81b85df234e6eea726414d9d",
+  "model_artifact": {
+    "sha256": "cc30530f2f773fa03a48f6ff6713b2bc60f77a599a0d8414c979a96dccb27ca3",
+    "bytes": 17545916886,
+    "files": 17,
+    "fingerprint_seconds": 16.238680731970817
+  },
+  "parameter_count": 8767123696,
+  "precision": "bf16",
+  "device": "cuda",
+  "model_load_seconds": 7.137515123002231,
+  "model_memory_mb": 16722.02978515625,
+  "clips": 200,
+  "resumed_clips": 0,
+  "decode_workers": 4,
+  "frame_source_counts": {
+    "frame_cache": 200
+  },
+  "source_counts": {
+    "supplier-train-batch-b": 54,
+    "supplier-train-batch-a": 86,
+    "supplier-train-batch-c": 60
+  },
+  "selection_counts": {
+    "deterministic_bad_frame": 151,
+    "deterministic_low_event_control": 49
+  },
+  "successful_clips": 200,
+  "structured_json_valid_clips": 200,
+  "video_seconds": 1035.2333333333336,
+  "aggregate_service_seconds": 201.7741744730156,
+  "wall_seconds_excluding_model_load": 195.91168346395716,
+  "current_session_video_seconds": 1035.2333333333336,
+  "video_hours_per_wall_hour": 5.2841837455997895,
+  "latency_seconds": {
+    "total_p50": 0.8274665729841217,
+    "total_p95": 1.468417017837055,
+    "decode_p50": 0.061243527103215456,
+    "preprocess_p50": 0.20713483402505517,
+    "generation_p50": 0.548603622475639
+  },
+  "code_version": "0.7.0+src.22f0a9aec274f827",
+  "environment": {
+    "platform": "Linux-5.10.134-013.8.2.kangaroo.al8.x86_64-x86_64-with-glibc2.35",
+    "python": "3.12.13",
+    "torch": "2.10.0+cu128",
+    "transformers": "5.8.1",
+    "cuda_device": "NVIDIA H20"
+  },
+  "input_protocol": {
+    "frame_count": 8,
+    "maximum_edge": 448,
+    "selection_seed": 79,
+    "selection_strategy": "balanced_weak",
+    "maximum_clips": 200,
+    "resume": true,
+    "decode_workers": 4,
+    "frame_cache_enabled": true,
+    "require_frame_cache": true,
+    "max_new_tokens": 128,
+    "wire_output_schema": "compact_sparse_findings_v1",
+    "prompt_version": "capability_guarded_rgb_v2",
+    "task_order": [
+      "hand_absent",
+      "persistent_extra_hands",
+      "semantic_camera_shake",
+      "severe_occlusion",
+      "mano_overlay_drift",
+      "task_label_mismatch",
+      "subtask_boundary_error",
+      "unusable_visual_quality",
+      "action_not_observable",
+      "interaction_incomplete",
+      "frozen_or_duplicate_frames",
+      "severe_lens_artifact",
+      "scene_task_out_of_scope"
+    ]
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "schema_version": "egoqc-paired-prompt-ablation-v1",
+  "created_at": "2026-08-20T08:40:42.318545+00:00",
+  "status": "paired_prompt_behavior_comparison_not_accuracy",
+  "formal_accuracy_measured": false,
+  "accuracy_claim_authorized": false,
+  "warning": "These are unscored model behavior deltas on identical clips, not human-Gold accuracy.",
+  "probability_threshold": 0.5,
+  "paired_clips": 200,
+  "paired_ids_sha256": "9d3810d40d577db7a5a9453b96d4696f8deaa004c14a1335a93e73b3b23a269f",
+  "baseline_root": "/mnt/workspace/egoqc-derived/teacher-8b-pilot-1000-v1",
+  "candidate_root": "/mnt/workspace/egoqc-derived/teacher-8b-prompt-v2-200-v1",
+  "baseline": {
+    "clips": 200,
+    "structured_json_valid": 200,
+    "structured_json_coverage": 1.0,
+    "abstentions": 0,
+    "abstention_rate": 0.0,
+    "any_finding_rate": 0.245,
+    "mean_reported_confidence": 0.9951,
+    "task_trigger_counts": {
+      "action_not_observable": 37,
+      "persistent_extra_hands": 2,
+      "semantic_camera_shake": 1,
+      "severe_lens_artifact": 9
+    },
+    "task_trigger_rates": {
+      "action_not_observable": 0.185,
+      "persistent_extra_hands": 0.01,
+      "semantic_camera_shake": 0.005,
+      "severe_lens_artifact": 0.045
+    }
+  },
+  "candidate": {
+    "clips": 200,
+    "structured_json_valid": 200,
+    "structured_json_coverage": 1.0,
+    "abstentions": 0,
+    "abstention_rate": 0.0,
+    "any_finding_rate": 0.415,
+    "mean_reported_confidence": 0.9928,
+    "task_trigger_counts": {
+      "action_not_observable": 60,
+      "interaction_incomplete": 1,
+      "persistent_extra_hands": 1,
+      "task_label_mismatch": 21
+    },
+    "task_trigger_rates": {
+      "action_not_observable": 0.3,
+      "interaction_incomplete": 0.005,
+      "persistent_extra_hands": 0.005,
+      "task_label_mismatch": 0.105
+    }
+  },
+  "by_selection_source": {
+    "deterministic_bad_frame": {
+      "baseline": {
+        "clips": 151,
+        "structured_json_valid": 151,
+        "structured_json_coverage": 1.0,
+        "abstentions": 0,
+        "abstention_rate": 0.0,
+        "any_finding_rate": 0.2582781456953642,
+        "mean_reported_confidence": 0.9948344370860928,
+        "task_trigger_counts": {
+          "action_not_observable": 31,
+          "persistent_extra_hands": 1,
+          "semantic_camera_shake": 1,
+          "severe_lens_artifact": 6
+        },
+        "task_trigger_rates": {
+          "action_not_observable": 0.2052980132450331,
+          "persistent_extra_hands": 0.006622516556291391,
+          "semantic_camera_shake": 0.006622516556291391,
+          "severe_lens_artifact": 0.039735099337748346
+        }
+      },
+      "candidate": {
+        "clips": 151,
+        "structured_json_valid": 151,
+        "structured_json_coverage": 1.0,
+        "abstentions": 0,
+        "abstention_rate": 0.0,
+        "any_finding_rate": 0.4105960264900662,
+        "mean_reported_confidence": 0.9929801324503311,
+        "task_trigger_counts": {
+          "action_not_observable": 44,
+          "interaction_incomplete": 1,
+          "task_label_mismatch": 17
+        },
+        "task_trigger_rates": {
+          "action_not_observable": 0.2913907284768212,
+          "interaction_incomplete": 0.006622516556291391,
+          "task_label_mismatch": 0.11258278145695365
+        }
+      }
+    },
+    "deterministic_low_event_control": {
+      "baseline": {
+        "clips": 49,
+        "structured_json_valid": 49,
+        "structured_json_coverage": 1.0,
+        "abstentions": 0,
+        "abstention_rate": 0.0,
+        "any_finding_rate": 0.20408163265306123,
+        "mean_reported_confidence": 0.9959183673469387,
+        "task_trigger_counts": {
+          "action_not_observable": 6,
+          "persistent_extra_hands": 1,
+          "severe_lens_artifact": 3
+        },
+        "task_trigger_rates": {
+          "action_not_observable": 0.12244897959183673,
+          "persistent_extra_hands": 0.02040816326530612,
+          "severe_lens_artifact": 0.061224489795918366
+        }
+      },
+      "candidate": {
+        "clips": 49,
+        "structured_json_valid": 49,
+        "structured_json_coverage": 1.0,
+        "abstentions": 0,
+        "abstention_rate": 0.0,
+        "any_finding_rate": 0.42857142857142855,
+        "mean_reported_confidence": 0.9922448979591837,
+        "task_trigger_counts": {
+          "action_not_observable": 16,
+          "persistent_extra_hands": 1,
+          "task_label_mismatch": 4
+        },
+        "task_trigger_rates": {
+          "action_not_observable": 0.32653061224489793,
+          "persistent_extra_hands": 0.02040816326530612,
+          "task_label_mismatch": 0.08163265306122448
+        }
+      }
+    }
+  },
+  "paired_changes": {
+    "changed_task_set_clips": 74,
+    "changed_task_set_rate": 0.37,
+    "changed_any_finding_clips": 62,
+    "changed_any_finding_rate": 0.31,
+    "added_task_counts": {
+      "action_not_observable": 38,
+      "interaction_incomplete": 1,
+      "task_label_mismatch": 21
+    },
+    "removed_task_counts": {
+      "action_not_observable": 15,
+      "persistent_extra_hands": 1,
+      "semantic_camera_shake": 1,
+      "severe_lens_artifact": 9
+    },
+    "mean_reported_confidence_delta": -0.002300000000000002
+  }
+}
