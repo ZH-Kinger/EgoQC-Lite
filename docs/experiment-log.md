@@ -285,3 +285,18 @@ P50/P95、吞吐、CPU/GPU/内存：
 - 队列：220,922,471 bytes，SHA-256 `bc1ef2d208387487a41ff2789cab3c74bf5c6fb6eec95fffe4a97dc9fd855495`。
 - 当前边界：这是待标注训练候选，尚未调用视觉教师、尚未形成 30,000 条训练标签，也不能用于报告准确率。
 - 产物：开发机 `/mnt/workspace/egoqc-derived/train-expansion-v1/merged/teacher-api-queue.jsonl`。
+
+## EXP-020：训练候选预解码并发 pilot
+
+- 参数：1,000 clips、每 clip 8 帧、最大边 448、JPEG quality 82、24 workers、`balanced_weak`、seed 79。
+- 结果：1,000/1,000 完成，302.150 秒，平均 0.30215 秒/clip；编码数据 183,207,393 bytes，目录实际占用约 207MB。
+- index SHA-256：`634bf69fc6b35480ceda64ef13726bc4712245dee6fd4badcf4efb66b68c1be7`。
+- 结论：24 workers 稳定，预计 30,000 clips 约 2.5–2.7 小时、约 5.5–6.2GB；CPFS 尚有约 6.0TB，容量满足。
+- 问题：首次参数误写为 `balanced`，CLI 正确拒绝；修正为 `balanced_weak` 后 1-clip 烟测通过再启动 pilot。
+- 原始数据：只读；缓存不保存源绝对路径。
+
+## EXP-021：30k 训练候选全量预解码
+
+- 状态：运行中，可恢复 tmux session `egoqc-train-cache-30k`。
+- 参数与 EXP-020 一致；输出 `/mnt/workspace/egoqc-derived/train-cache-full-30k-v1`。
+- 启动检查：72/30,000，0.3211 秒/clip，ETA 9,610 秒；此值为启动期估计，完成后再登记最终吞吐和哈希。
