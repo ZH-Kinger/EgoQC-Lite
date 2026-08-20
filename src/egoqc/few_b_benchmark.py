@@ -395,6 +395,7 @@ def benchmark_few_b_vlm(
         torch.cuda.memory_allocated() / 1024**2 if device == "cuda" else None
     )
     results: List[Dict[str, Any]] = []
+    inference_started = time.perf_counter()
     for row in rows:
         source = Path(str(row["source_uri"])).expanduser().resolve()
         start_s, end_s = _clip_window(row)
@@ -472,6 +473,25 @@ def benchmark_few_b_vlm(
                 "label_role": "unscored_prediction_not_gold",
             }
         )
+        elapsed = time.perf_counter() - inference_started
+        completed = len(results)
+        write_jsonl(output / "predictions.partial.jsonl", results)
+        write_json(
+            output / "progress.json",
+            {
+                "schema_version": SCHEMA_VERSION,
+                "status": "running",
+                "completed_clips": completed,
+                "total_clips": len(rows),
+                "elapsed_seconds": elapsed,
+                "average_seconds_per_clip": elapsed / completed,
+                "eta_seconds": elapsed / completed * (len(rows) - completed),
+                "structured_json_valid_clips": sum(
+                    int(item["structured_json_valid"]) for item in results
+                ),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
     total_seconds = sum(float(item["total_seconds"]) for item in results)
     total_video_seconds = sum(
         float(item["clip_end_s"] - item["clip_start_s"]) for item in results
@@ -526,4 +546,17 @@ def benchmark_few_b_vlm(
     }
     write_jsonl(output / "predictions.jsonl", results)
     write_json(output / "benchmark.json", report)
+    write_json(
+        output / "progress.json",
+        {
+            "schema_version": SCHEMA_VERSION,
+            "status": "completed",
+            "completed_clips": len(results),
+            "total_clips": len(results),
+            "elapsed_seconds": total_seconds,
+            "eta_seconds": 0.0,
+            "structured_json_valid_clips": report["structured_json_valid_clips"],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
     return report
