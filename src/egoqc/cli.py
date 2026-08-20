@@ -42,6 +42,7 @@ from .distillation import (
 )
 from .research_evaluation import evaluate_qc_research_protocol
 from .model_ablation import plan_model_ablation
+from .few_b_benchmark import benchmark_few_b_vlm
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
@@ -377,6 +378,26 @@ def main() -> None:
     )
     model_ablation.add_argument("--output", type=Path, required=True)
     model_ablation.add_argument("--seed", type=int, action="append", dest="seeds")
+    few_b_benchmark = sub.add_parser(
+        "benchmark-few-b-vlm",
+        help="在只读真实 clip 上记录 few-B VLM 的解码、推理、显存和结构化输出",
+    )
+    few_b_benchmark.add_argument("--model-path", type=Path, required=True)
+    few_b_benchmark.add_argument("--model-id")
+    few_b_benchmark.add_argument("--manifest", type=Path, required=True)
+    few_b_benchmark.add_argument(
+        "--task-config", type=Path, default=Path("config/visual_model_tasks.json")
+    )
+    few_b_benchmark.add_argument("--output", type=Path, required=True)
+    few_b_benchmark.add_argument("--maximum-clips", type=int, default=3)
+    few_b_benchmark.add_argument("--frame-count", type=int, default=8)
+    few_b_benchmark.add_argument("--maximum-edge", type=int, default=448)
+    few_b_benchmark.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
+    few_b_benchmark.add_argument(
+        "--precision", choices=("bf16", "fp16", "fp32"), default="bf16"
+    )
+    few_b_benchmark.add_argument("--max-new-tokens", type=int, default=256)
+    few_b_benchmark.add_argument("--seed", type=int, default=17)
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -1062,6 +1083,22 @@ def main() -> None:
             args.deployment_config,
             args.output,
             seeds=args.seeds or (17, 31, 47),
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "benchmark-few-b-vlm":
+        summary = benchmark_few_b_vlm(
+            args.model_path,
+            args.manifest,
+            args.task_config,
+            args.output,
+            model_id=args.model_id,
+            maximum_clips=args.maximum_clips,
+            frame_count=args.frame_count,
+            maximum_edge=args.maximum_edge,
+            device=args.device,
+            precision=args.precision,
+            max_new_tokens=args.max_new_tokens,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":
