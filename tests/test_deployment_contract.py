@@ -14,7 +14,8 @@ def test_cpu_gpu_student_deployment_contract_is_consistent() -> None:
 
     assert contract["schema_version"] == "egoqc-student-deployment-v1"
     assert contract["architecture"]["shared_weights_across_backends"] is True
-    assert contract["architecture"]["maximum_parameters"] <= 8_000_000
+    assert contract["architecture"]["preferred_parameter_range"] == [16_000_000, 24_000_000]
+    assert contract["architecture"]["maximum_parameters"] <= 24_000_000
     assert contract["profiles"]["cpu_int8"]["precision"].startswith("int8")
     assert contract["profiles"]["gpu_fp16"]["precision"] == "fp16"
     assert contract["accuracy_gates"]["abstention_required"] is True

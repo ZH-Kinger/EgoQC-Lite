@@ -3,15 +3,17 @@
   "status": "pre_registered_targets_not_measured_results",
   "objective": "one compact temporal QC student with CPU and GPU execution profiles",
   "architecture": {
-    "primary": "mobilenet_v3_large_0_75_plus_temporal_shift_and_depthwise_tcn",
-    "challenger": "movinet_a0_stream",
+    "primary": "mobilenet_v4_hybrid_medium_plus_temporal_shift_and_depthwise_tcn",
+    "fallback": "mobilenet_v3_large_0_75_plus_temporal_shift_and_depthwise_tcn",
+    "challengers": ["efficientformer_v2", "movinet_stream"],
     "shared_weights_across_backends": true,
     "global_rgb_stream": true,
     "shared_hand_roi_encoder": true,
     "masked_kinematic_feature_branch": true,
     "rules_remain_external_deterministic_features": true,
     "language_generation_head": false,
-    "maximum_parameters": 8000000
+    "preferred_parameter_range": [16000000, 24000000],
+    "maximum_parameters": 24000000
   },
   "input_contract": {
     "clip_duration_s": 8.0,
@@ -22,13 +24,13 @@
   },
   "profiles": {
     "cpu_int8": {
-      "global_frames": 16,
-      "global_resolution": 160,
-      "hand_roi_frames": 16,
-      "hand_roi_resolution": 128,
+      "global_frames": 24,
+      "global_resolution": 192,
+      "hand_roi_frames": 24,
+      "hand_roi_resolution": 160,
       "precision": "int8_qat_or_calibrated_ptq",
       "runtimes": ["onnxruntime_cpu", "openvino_cpu"],
-      "maximum_artifact_mb": 12,
+      "maximum_artifact_mb": 32,
       "batching": "batch_1_or_small_dynamic_batch",
       "benchmark_hardware_id_required": true,
       "minimum_video_hours_per_wall_hour": null
@@ -37,10 +39,10 @@
       "global_frames": 32,
       "global_resolution": 224,
       "hand_roi_frames": 32,
-      "hand_roi_resolution": 160,
+      "hand_roi_resolution": 192,
       "precision": "fp16",
       "runtimes": ["pytorch_cuda", "onnxruntime_cuda", "tensorrt"],
-      "maximum_artifact_mb": 20,
+      "maximum_artifact_mb": 56,
       "batching": "dynamic_batch_from_memory_budget",
       "benchmark_hardware_id_required": true,
       "minimum_video_hours_per_wall_hour": null

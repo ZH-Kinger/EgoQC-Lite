@@ -54,8 +54,8 @@
   "student_system": {
     "deployment_contract": "config/qc_student_deployment_v1.json",
     "shared_cpu_gpu_weights": true,
-    "global_stream": {"cpu": {"frames": 16, "resolution": 160}, "gpu": {"frames": 32, "resolution": 224}},
-    "hand_roi_stream": {"cpu": {"frames": 16, "resolution": 128}, "gpu": {"frames": 32, "resolution": 160}},
+    "global_stream": {"cpu": {"frames": 24, "resolution": 192}, "gpu": {"frames": 32, "resolution": 224}},
+    "hand_roi_stream": {"cpu": {"frames": 24, "resolution": 160}, "gpu": {"frames": 32, "resolution": 192}},
     "kinematic_stream": "masked_numeric_temporal_encoder",
     "objective": "weighted_asymmetric_multilabel_plus_logit_feature_temporal_distillation",
     "outputs": ["per_task_probability", "uncertainty", "abstain", "temporal_evidence"],

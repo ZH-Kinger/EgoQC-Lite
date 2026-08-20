@@ -61,16 +61,17 @@ precision、完成概率校准和跨供应商测试后，才能为某个 task �
 生产部署只维护一套 student 权重，机器可读约束见
 [`config/qc_student_deployment_v1.json`](../config/qc_student_deployment_v1.json)。CPU 使用 INT8
 ONNX Runtime/OpenVINO，GPU 使用 FP16 PyTorch/ONNX Runtime/TensorRT；二者必须在同一 Gold
-集合上做输出一致性和决策一致性测试。CPU 默认 16×160 全局帧和 16×128 手部 ROI，GPU
-默认 32×224 全局帧和 32×160 手部 ROI。输入分辨率和帧数可以不同，但 taxonomy、权重、
+集合上做输出一致性和决策一致性测试。CPU 默认 24×192 全局帧和 24×160 手部 ROI，GPU
+默认 32×224 全局帧和 32×192 手部 ROI。输入分辨率和帧数可以不同，但 taxonomy、权重、
 概率校准协议和拒答策略必须一致。CPU/GPU profile 可在同一份冻结 validation 上分别选择
 阈值，但阈值必须在 test 前冻结，禁止用 test 重新调参。
 
 QC student 不训练 8B 级通用大模型。默认输入从原始视频在线缩放为 192×192，并采用
 letterbox 保留完整第一视角画面，避免方形中心裁剪删除画面边缘或底部的手；每 4 个已解码帧
 取一帧进入时序层。原始 720p/1080p 始终只读保存，不额外存一份低分辨率视频。生产模型优先
-采用不超过 8M 参数的 MobileNetV3-Large-0.75 + Temporal Shift + depthwise TCN 作为首选，
-MoViNet-A0-Stream 作为 challenger；先冻结编码器训练 head，效果不足再
+采用 16M–24M 参数的 MobileNetV4-Hybrid-Medium + Temporal Shift + depthwise TCN 作为
+首选，EfficientFormerV2 和 MoViNet-Stream 作为 challenger，8M MobileNetV3 仅作为低配
+fallback；先冻结编码器训练 head，效果不足再
 逐层解冻。MANO 数值指标、速度、相机运动和规则事件作为低维特征融合，不让视觉网络重复
 学习代码已经能精确计算的内容。
 
