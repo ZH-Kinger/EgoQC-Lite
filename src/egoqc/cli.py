@@ -65,6 +65,7 @@ from .egodex_review_batch import build_egodex_review_batch
 from .multisource_discovery import discover_lerobot_roots
 from .generic_ego import build_generic_ego_views
 from .task_taxonomy import classify_task_records
+from .storage_safety import assert_derived_output
 from .registry import (
     create_manifest,
     register_datasets,
@@ -838,6 +839,9 @@ def main() -> None:
     dashboard.add_argument("--registry", type=Path, required=True)
     dashboard.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    output_path = getattr(args, "output", None)
+    if output_path is not None:
+        assert_derived_output(output_path)
 
     def database_url(value: Optional[str]) -> str:
         result = value or os.environ.get("DATABASE_URL")

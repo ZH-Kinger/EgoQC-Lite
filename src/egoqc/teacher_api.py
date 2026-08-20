@@ -19,6 +19,7 @@ import numpy as np
 from PIL import Image
 
 from .report import write_json, write_jsonl
+from .storage_safety import assert_derived_output, assert_raw_file_unchanged, raw_file_stamp
 
 
 SCHEMA_VERSION = "egoqc-teacher-api-run-v1"
@@ -85,6 +86,7 @@ def extract_clip_frames(
     path = Path(source_uri).expanduser()
     if not path.is_file():
         raise FileNotFoundError(f"视频不存在: {path}")
+    before = raw_file_stamp(path)
     targets = _target_times(start_s, end_s, sample_fps, max_frames)
     selected: List[Tuple[float, Image.Image]] = []
     with av.open(str(path)) as container:
@@ -116,6 +118,7 @@ def extract_clip_frames(
                 break
     if not selected:
         raise ValueError(f"clip 未解码到帧: {path} [{start_s}, {end_s}]")
+    assert_raw_file_unchanged(path, before)
 
     frames: List[Dict[str, Any]] = []
     encoded_bytes = 0
@@ -561,7 +564,7 @@ def run_teacher_api(
     if not dry_run and not api_key:
         raise ValueError(f"环境变量 {effective_key_env} 未设置")
 
-    output = output.expanduser().resolve()
+    output = assert_derived_output(output)
     output.mkdir(parents=True, exist_ok=True)
     endpoint = _endpoint(effective_base_url)
     results: List[Dict[str, Any]] = []

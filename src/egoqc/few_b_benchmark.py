@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .provenance import code_version
 from .report import write_json, write_jsonl
+from .storage_safety import assert_derived_output, assert_raw_file_unchanged, raw_file_stamp
 
 
 SCHEMA_VERSION = "egoqc-few-b-vlm-benchmark-v1"
@@ -166,9 +167,11 @@ def _decode_benchmark_row(
     row: Dict[str, Any], frame_count: int
 ) -> Tuple[Path, float, float, List[Any], float]:
     source = Path(str(row["source_uri"])).expanduser().resolve()
+    before = raw_file_stamp(source)
     start_s, end_s = _clip_window(row)
     started = time.perf_counter()
     frames = _sample_video_frames(source, start_s, end_s, frame_count)
+    assert_raw_file_unchanged(source, before)
     return source, start_s, end_s, frames, time.perf_counter() - started
 
 
@@ -230,7 +233,7 @@ def freeze_few_b_samples(
         positive_rows += int(bool(active))
         for task in active:
             positive_tasks[task] = positive_tasks.get(task, 0) + 1
-    output = output.expanduser().resolve()
+    output = assert_derived_output(output)
     output.mkdir(parents=True, exist_ok=True)
     frozen = output / "samples.jsonl"
     write_jsonl(frozen, selected)
