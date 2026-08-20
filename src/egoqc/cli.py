@@ -68,6 +68,7 @@ from .multisource_discovery import discover_lerobot_roots
 from .generic_ego import build_generic_ego_views
 from .task_taxonomy import classify_task_records
 from .training_balance import build_training_sampling_weights
+from .visual_intervention_plan import build_visual_intervention_plan
 from .storage_safety import assert_derived_output
 from .registry import (
     create_manifest,
@@ -666,6 +667,15 @@ def main() -> None:
     training_weights.add_argument("--output", type=Path, required=True)
     training_weights.add_argument("--minimum-weight", type=float, default=0.25)
     training_weights.add_argument("--maximum-weight", type=float, default=4.0)
+    visual_interventions = sub.add_parser(
+        "build-visual-intervention-plan",
+        help="为缓存帧生成 train-only 惰性视觉干预计划，不复制或修改原视频",
+    )
+    visual_interventions.add_argument("--records", type=Path, required=True)
+    visual_interventions.add_argument("--config", type=Path, required=True)
+    visual_interventions.add_argument("--output", type=Path, required=True)
+    visual_interventions.add_argument("--maximum-records", type=int, default=12000)
+    visual_interventions.add_argument("--seed", type=int, default=83)
     egodex_candidates.add_argument(
         "--full-profile", action="store_true",
         help="加载完整关节变换；默认仅读 confidence 和视频头以降低 OSS I/O",
@@ -1454,6 +1464,15 @@ def main() -> None:
             args.output,
             minimum_weight=args.minimum_weight,
             maximum_weight=args.maximum_weight,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-visual-intervention-plan":
+        summary = build_visual_intervention_plan(
+            args.records,
+            args.config,
+            args.output,
+            maximum_records=args.maximum_records,
+            seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
