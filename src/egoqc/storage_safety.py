@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 
 
 # /mnt/data and /mnt/workspace can be aliases of the same CPFS mount.  Protect
@@ -13,6 +13,7 @@ DEFAULT_PROTECTED_RAW_ROOTS = (
     Path("/mnt/data/shutu"),
     Path("/mnt/data/egodex"),
 )
+DEFAULT_MOUNT_ALIAS_GROUPS = ((Path("/mnt/data"), Path("/mnt/workspace")),)
 
 
 def protected_raw_roots() -> tuple[Path, ...]:
@@ -26,7 +27,10 @@ def protected_raw_roots() -> tuple[Path, ...]:
 
 
 def assert_derived_output(
-    output: Path, *, protected_roots: Optional[Iterable[Path]] = None
+    output: Path,
+    *,
+    protected_roots: Optional[Iterable[Path]] = None,
+    mount_alias_groups: Optional[Sequence[Sequence[Path]]] = None,
 ) -> Path:
     resolved = output.expanduser().resolve(strict=False)
     roots = (
@@ -34,13 +38,40 @@ def assert_derived_output(
         if protected_roots is not None
         else protected_raw_roots()
     )
+    alias_groups = mount_alias_groups or DEFAULT_MOUNT_ALIAS_GROUPS
+    candidates = _lexical_mount_aliases(resolved, alias_groups)
     for root in roots:
-        if resolved == root or root in resolved.parents or _aliases_protected_subtree(resolved, root):
+        if any(
+            candidate == root
+            or root in candidate.parents
+            or _aliases_protected_subtree(candidate, root)
+            for candidate in candidates
+        ):
             raise ValueError(
                 f"refusing to write derived output under protected raw root: {resolved} "
                 f"(protected: {root})"
             )
     return resolved
+
+
+def _lexical_mount_aliases(
+    candidate: Path, groups: Sequence[Sequence[Path]]
+) -> set[Path]:
+    """Expand equivalent mount spellings, including hidden child mounts.
+
+    A child mount such as /mnt/data/oss can have a different device/inode from
+    the underlying /mnt/workspace/oss path.  Root identity alone cannot detect
+    that shadowing, so preserve the relative suffix across declared aliases.
+    """
+
+    expanded = {candidate}
+    for raw_group in groups:
+        group = [path.expanduser().resolve(strict=False) for path in raw_group]
+        for source in group:
+            if candidate == source or source in candidate.parents:
+                suffix = candidate.relative_to(source)
+                expanded.update(target / suffix for target in group)
+    return expanded
 
 
 def _aliases_protected_subtree(candidate: Path, protected: Path) -> bool:

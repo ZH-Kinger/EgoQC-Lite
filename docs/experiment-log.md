@@ -256,3 +256,4 @@ P50/P95、吞吐、CPU/GPU/内存：
 - 影响：仅检查输出字符串是否位于 `/mnt/data` 下会漏掉 `/mnt/workspace/oss/...` 这类对同一原始目录的别名写入。
 - 处置：暂停远端 cohort 生成；保护逻辑改为原始子命名空间 + 设备号/inode 别名识别；后续派生产物统一进入 `/mnt/workspace/egoqc-derived`。
 - 本轮远端动作：仅只读执行 `realpath`、`stat`、`findmnt`、一级目录枚举；此前只更新了 `/mnt/workspace/ie-qc-code` 代码，尚未运行 cohort 规划器。
+- 首次 inode 自检发现 `/mnt/data/oss` 是覆盖在共享根上的独立 OSS 子挂载，而 `/mnt/workspace/oss` 指向底层 CPFS 目录；两者子目录 inode 不同。保护逻辑因此进一步加入“声明式挂载根别名 + 相对路径映射”，即使子挂载遮蔽了 inode 关系，也拒绝两个拼法下的 raw 命名空间。

@@ -42,3 +42,18 @@ def test_mount_alias_of_protected_raw_root_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="protected raw root"):
         assert_derived_output(alias / "derived", protected_roots=[raw])
+
+
+def test_declared_mount_alias_rejects_shadowed_child_mount(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    workspace = tmp_path / "workspace"
+    raw = data / "oss"
+    raw.mkdir(parents=True)
+    (workspace / "oss").mkdir(parents=True)
+
+    with pytest.raises(ValueError, match="protected raw root"):
+        assert_derived_output(
+            workspace / "oss" / "derived",
+            protected_roots=[raw],
+            mount_alias_groups=[(data, workspace)],
+        )
