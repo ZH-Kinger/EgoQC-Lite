@@ -445,7 +445,7 @@ def benchmark_few_b_vlm(
             {
                 "schema_version": SCHEMA_VERSION,
                 "status": "succeeded",
-                "video_id": row.get("video_id"),
+                "video_id": row.get("video_id") or row.get("request_id"),
                 "record_id": row.get("record_id") or row.get("request_id"),
                 "source_dataset": row.get("source_dataset"),
                 "selection_source": row.get("selection_source"),
@@ -496,6 +496,13 @@ def benchmark_few_b_vlm(
     total_video_seconds = sum(
         float(item["clip_end_s"] - item["clip_start_s"]) for item in results
     )
+    source_counts: Dict[str, int] = {}
+    selection_counts: Dict[str, int] = {}
+    for row in rows:
+        source = str(row.get("source_dataset") or "unknown")
+        selection = str(row.get("selection_source") or "unknown")
+        source_counts[source] = source_counts.get(source, 0) + 1
+        selection_counts[selection] = selection_counts.get(selection, 0) + 1
     report = {
         "schema_version": SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -511,6 +518,8 @@ def benchmark_few_b_vlm(
         "model_load_seconds": load_seconds,
         "model_memory_mb": model_memory_mb,
         "clips": len(results),
+        "source_counts": source_counts,
+        "selection_counts": selection_counts,
         "successful_clips": len(results),
         "structured_json_valid_clips": sum(
             int(item["structured_json_valid"]) for item in results
