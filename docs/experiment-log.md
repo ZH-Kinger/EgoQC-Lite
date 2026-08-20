@@ -300,3 +300,26 @@ P50/P95、吞吐、CPU/GPU/内存：
 - 状态：运行中，可恢复 tmux session `egoqc-train-cache-30k`。
 - 参数与 EXP-020 一致；输出 `/mnt/workspace/egoqc-derived/train-cache-full-30k-v1`。
 - 启动检查：72/30,000，0.3211 秒/clip，ETA 9,610 秒；此值为启动期估计，完成后再登记最终吞吐和哈希。
+
+## EXP-022：训练任务分类与采样校正
+
+- 输入：30,000 条 train-only 候选。
+- 任务分类：9,281 个唯一任务文本，8,286 个规则可分类，995 个进入文本语义复核；覆盖 29 类交互原语。
+- 分布问题：`tie_untie` 8,156 条、`pick_place` 7,302 条，而 `personal_care` 仅 5 条；原始均匀采样会严重偏向鞋带和取放任务。
+- 处置：按“交互原语 + 精确任务文本 + split_group”三因素 inverse-sqrt 几何均值生成采样权重，范围 0.2813–4.0、均值约 1.0；不删除原始候选。
+- 证据 SHA-256：taxonomy `696a372f1b9876de89160a08217d0891dc09c640b0472c6bb157fca32dd81a6f`；weighted records `3947ede847ffc34253b9e1aba071c0edf171f1d3f1c1999840251eaef6260c88`。
+
+## EXP-023：12k train-only 惰性视觉干预
+
+- 生成 12,000 条计划，覆盖 855 个训练视频组；11 类干预每类约 1,090 条。
+- 覆盖任务：画质、冻结帧、交互缺失、子任务边界、相机抖动、镜头伪影、遮挡、动作不可观察、任务文本错配、MANO overlay 漂移。
+- `hand_absent`、`persistent_extra_hands`、`scene_task_out_of_scope` 禁止用不可靠合成替代，必须来自真实样本。
+- 计划为缓存帧上的 lazy transform，物化图片数 0；synthetic 永远不是 Gold。
+- manifest SHA-256：`9ab70c3e864195b6cbd20311721085a9f01eb448bfc64fd4e5299ffa8d0f18b6`。
+
+## EXP-024：新来源本地 8B teacher pilot
+
+- 状态：运行中；1,000 clips，全部要求命中 frame cache，不调用外部 API。
+- 早期 245 条观察：`action_not_observable` 在规则异常/控制上的触发率约 20.3%/15.5%；`severe_lens_artifact` 约 4.8%/6.9%；模型总体置信度约 0.995，拒答为 0。
+- 解释：规则速度异常并不一定能从 8 帧 RGB 观察；同时原始模型置信度明显未校准。两种标签不能直接互相覆盖。
+- 治理：8B 输出暂为 unscored prediction；完成后只作为 teacher-silver 候选，必须经过 Gold 校准、规则分歧路由和人工复检。
