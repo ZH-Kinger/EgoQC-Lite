@@ -7,6 +7,7 @@ import numpy as np
 from egoqc.few_b_benchmark import (
     _clip_window,
     _load_resumable_results,
+    _prefetched_decodes,
     _sample_video_frames,
     freeze_few_b_samples,
     normalize_sparse_findings,
@@ -120,6 +121,27 @@ def test_resume_only_accepts_same_protocol_and_selected_ids(tmp_path: Path) -> N
     resumed = _load_resumable_results(output, rows, frame_count=8, maximum_edge=448)
 
     assert [row["video_id"] for row in resumed] == ["keep"]
+
+
+def test_prefetched_decodes_preserve_row_order(tmp_path: Path) -> None:
+    rows = []
+    for index in range(2):
+        video = tmp_path / f"prefetch-{index}.mp4"
+        _write_video(video, frames=180)
+        rows.append(
+            {
+                "request_id": f"row-{index}",
+                "source_uri": str(video),
+                "clip_start_s": 1.0,
+                "clip_end_s": 3.0,
+                "duration_s": 6.0,
+            }
+        )
+
+    decoded = list(_prefetched_decodes(rows, frame_count=4, workers=2))
+
+    assert [item[0]["request_id"] for item in decoded] == ["row-0", "row-1"]
+    assert all(len(item[4]) == 4 for item in decoded)
 
 
 def test_freeze_few_b_samples_writes_balanced_hashed_manifest(tmp_path: Path) -> None:

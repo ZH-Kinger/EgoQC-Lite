@@ -406,6 +406,12 @@ def main() -> None:
     few_b_benchmark.add_argument("--maximum-clips", type=int, default=3)
     few_b_benchmark.add_argument("--frame-count", type=int, default=8)
     few_b_benchmark.add_argument("--maximum-edge", type=int, default=448)
+    few_b_benchmark.add_argument(
+        "--decode-workers",
+        type=int,
+        default=2,
+        help="有界 CPU/挂载视频预取并发；不会预载整批视频",
+    )
     few_b_benchmark.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     few_b_benchmark.add_argument(
         "--precision", choices=("bf16", "fp16", "fp32"), default="bf16"
@@ -1156,6 +1162,7 @@ def main() -> None:
             maximum_clips=args.maximum_clips,
             frame_count=args.frame_count,
             maximum_edge=args.maximum_edge,
+            decode_workers=args.decode_workers,
             device=args.device,
             precision=args.precision,
             max_new_tokens=args.max_new_tokens,

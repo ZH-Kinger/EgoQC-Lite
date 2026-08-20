@@ -4,6 +4,8 @@ import hashlib
 import json
 import platform
 import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -158,6 +160,46 @@ def _sample_video_frames(
                 f"failed to decode {frame_count} frames from {path} at {start_s:.3f}..{end_s:.3f}"
             )
     return images
+
+
+def _decode_benchmark_row(
+    row: Dict[str, Any], frame_count: int
+) -> Tuple[Path, float, float, List[Any], float]:
+    source = Path(str(row["source_uri"])).expanduser().resolve()
+    start_s, end_s = _clip_window(row)
+    started = time.perf_counter()
+    frames = _sample_video_frames(source, start_s, end_s, frame_count)
+    return source, start_s, end_s, frames, time.perf_counter() - started
+
+
+def _prefetched_decodes(
+    rows: Sequence[Dict[str, Any]], frame_count: int, workers: int
+) -> Iterable[Tuple[Dict[str, Any], Path, float, float, List[Any], float]]:
+    if workers <= 0:
+        raise ValueError("decode workers must be positive")
+    if workers == 1:
+        for row in rows:
+            yield row, *_decode_benchmark_row(row, frame_count)
+        return
+    iterator = iter(rows)
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="egoqc-decode") as executor:
+        pending = deque()
+        for _ in range(workers):
+            try:
+                row = next(iterator)
+            except StopIteration:
+                break
+            pending.append((row, executor.submit(_decode_benchmark_row, row, frame_count)))
+        while pending:
+            row, future = pending.popleft()
+            yield row, *future.result()
+            try:
+                next_row = next(iterator)
+            except StopIteration:
+                continue
+            pending.append(
+                (next_row, executor.submit(_decode_benchmark_row, next_row, frame_count))
+            )
 
 
 def freeze_few_b_samples(
@@ -403,6 +445,7 @@ def benchmark_few_b_vlm(
     seed: int = 17,
     selection_strategy: str = "stable_random",
     resume: bool = False,
+    decode_workers: int = 2,
 ) -> Dict[str, Any]:
     """Run a small, fully traced inference benchmark. It never computes accuracy."""
 
@@ -410,6 +453,8 @@ def benchmark_few_b_vlm(
         raise ValueError("precision must be bf16, fp16 or fp32")
     if device not in {"cuda", "cpu"}:
         raise ValueError("device must be cuda or cpu")
+    if decode_workers <= 0:
+        raise ValueError("decode_workers must be positive")
     try:
         import torch
         import transformers
@@ -475,23 +520,24 @@ def benchmark_few_b_vlm(
     )
     inference_started = time.perf_counter()
     newly_completed = 0
-    for row in pending_rows:
-        source = Path(str(row["source_uri"])).expanduser().resolve()
-        start_s, end_s = _clip_window(row)
+    for row, source, start_s, end_s, frames, decode_seconds in _prefetched_decodes(
+        pending_rows, frame_count, decode_workers
+    ):
         clip_started = time.perf_counter()
-        decode_started = time.perf_counter()
-        frames = _sample_video_frames(source, start_s, end_s, frame_count)
-        decode_seconds = time.perf_counter() - decode_started
         activity = str(row.get("task_id") or (row.get("activities") or [""])[0])
         prompt = _prompt(task_config, activity, frame_count)
         preprocess_started = time.perf_counter()
-        inputs = _prepare_model_inputs(
-            processor,
-            frames,
-            prompt,
-            maximum_edge,
-            frame_count / max(end_s - start_s, 1e-6),
-        )
+        try:
+            inputs = _prepare_model_inputs(
+                processor,
+                frames,
+                prompt,
+                maximum_edge,
+                frame_count / max(end_s - start_s, 1e-6),
+            )
+        finally:
+            for frame in frames:
+                frame.close()
         inputs = inputs.to(model.device)
         if device == "cuda":
             torch.cuda.synchronize()
@@ -537,7 +583,7 @@ def benchmark_few_b_vlm(
                 "decode_seconds": decode_seconds,
                 "preprocess_seconds": preprocess_seconds,
                 "generation_seconds": generation_seconds,
-                "total_seconds": time.perf_counter() - clip_started,
+                "total_seconds": decode_seconds + time.perf_counter() - clip_started,
                 "input_tokens": int(inputs.input_ids.shape[-1]),
                 "output_tokens": int(generated.shape[-1] - inputs.input_ids.shape[-1]),
                 "peak_inference_vram_mb": (
@@ -573,9 +619,14 @@ def benchmark_few_b_vlm(
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
         )
+    current_session_wall_seconds = time.perf_counter() - inference_started
     total_seconds = sum(float(item["total_seconds"]) for item in results)
     total_video_seconds = sum(
         float(item["clip_end_s"] - item["clip_start_s"]) for item in results
+    )
+    new_results = results[len(resumed_ids) :]
+    current_session_video_seconds = sum(
+        float(item["clip_end_s"] - item["clip_start_s"]) for item in new_results
     )
     source_counts: Dict[str, int] = {}
     selection_counts: Dict[str, int] = {}
@@ -600,6 +651,7 @@ def benchmark_few_b_vlm(
         "model_memory_mb": model_memory_mb,
         "clips": len(results),
         "resumed_clips": len(resumed_ids),
+        "decode_workers": decode_workers,
         "source_counts": source_counts,
         "selection_counts": selection_counts,
         "successful_clips": len(results),
@@ -607,8 +659,13 @@ def benchmark_few_b_vlm(
             int(item["structured_json_valid"]) for item in results
         ),
         "video_seconds": total_video_seconds,
-        "wall_seconds_excluding_model_load": total_seconds,
-        "video_hours_per_wall_hour": total_video_seconds / total_seconds if total_seconds else 0.0,
+        "aggregate_service_seconds": total_seconds,
+        "wall_seconds_excluding_model_load": current_session_wall_seconds,
+        "current_session_video_seconds": current_session_video_seconds,
+        "video_hours_per_wall_hour": (
+            current_session_video_seconds / current_session_wall_seconds
+            if current_session_wall_seconds else 0.0
+        ),
         "latency_seconds": {
             "total_p50": _percentile([item["total_seconds"] for item in results], 0.50),
             "total_p95": _percentile([item["total_seconds"] for item in results], 0.95),
@@ -631,6 +688,7 @@ def benchmark_few_b_vlm(
             "selection_strategy": selection_strategy,
             "maximum_clips": maximum_clips,
             "resume": resume,
+            "decode_workers": decode_workers,
             "max_new_tokens": max_new_tokens,
             "wire_output_schema": "compact_sparse_findings_v1",
             "task_order": list(task_config.get("model_tasks", {})),
