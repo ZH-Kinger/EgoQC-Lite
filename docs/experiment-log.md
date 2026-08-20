@@ -239,3 +239,13 @@ P50/P95、吞吐、CPU/GPU/内存：
 结果与结论边界：
 产物相对路径与 SHA-256：
 ```
+
+## EXP-015：普遍性证据审计
+
+- 结论：434-clip few-B 实验降级为 systems pilot，只用于证明缓存、解码与推理链路可运行，不作为准确率或跨域普遍性证据。
+- 开发机只读盘点：公共数据 2,856 rows / 2,856 `split_group`；三批供应商数据 1,800 / 308；内部 OSS 数据 378 / 126；总计 5,034 clip / 3,290 独立原视频组。
+- 发现问题：供应商与内部队列含同一原视频多 clip；按 clip 随机划分会产生泄漏和虚高指标。
+- 解决方案：预注册 100,000 独立 clip 系统池、30,000 独立 clip 训练池、10,000 独立 clip 人工 Gold 池；Gold 按 validation 2,500 / 同域 test 3,500 / 留源 external test 4,000 划分。
+- 统计约束：每任务自动正判若零假阳性，至少 381 次才能使 95% Wilson precision 下界超过 0.99；不足时明确报告 evidence insufficient。
+- 数据安全：本次仅读取 `/mnt/workspace` 队列元数据，未修改 `/mnt/data` OSS/CPFS 原始数据。
+- 协议：`docs/generality-evaluation-protocol.md`；机器配置：`config/qc_generality_protocol_v1.json`。

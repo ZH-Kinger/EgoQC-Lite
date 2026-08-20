@@ -1,0 +1,66 @@
+{
+  "schema_version": "egoqc-generality-protocol-v1",
+  "status": "pre_registered_targets_not_measured_results",
+  "unit_of_independence": "split_group_raw_video",
+  "systems_scale_cohort": {
+    "minimum_unique_clips": 100000,
+    "purpose": "吞吐、失败率、缓存命中率与百万小时外推；不用于准确率结论",
+    "human_gold_required": false
+  },
+  "model_development": {
+    "target_unique_train_clips": 30000,
+    "allowed_labels": ["human_gold", "adjudicated_gold", "teacher_weak_train_only"],
+    "minimum_source_classes": 4,
+    "minimum_independent_datasets": 8,
+    "minimum_camera_or_capture_families": 6,
+    "weak_labels_for_validation_or_test_forbidden": true
+  },
+  "human_gold": {
+    "target_unique_clips": 10000,
+    "validation": 2500,
+    "in_domain_test": 3500,
+    "external_source_test": 4000,
+    "double_annotation_fraction": 0.2,
+    "adjudicate_all_disagreements": true,
+    "minimum_predicted_positive_auto_decisions_per_task_if_zero_errors": 381
+  },
+  "required_held_out_axes": [
+    "raw_video_split_group",
+    "supplier_or_public_dataset",
+    "camera_or_capture_device",
+    "participant_or_session",
+    "task_family"
+  ],
+  "required_input_capabilities": [
+    "raw_video_only",
+    "video_and_text",
+    "video_with_partial_hand_state",
+    "video_with_full_mano_and_camera"
+  ],
+  "reporting": {
+    "primary": "recall_at_validation_selected_precision",
+    "precision_95_ci_lower_bound": 0.99,
+    "required_slices": [
+      "per_task",
+      "per_source",
+      "worst_source",
+      "per_capture_family",
+      "per_input_capability",
+      "clean_control",
+      "open_world_ood"
+    ],
+    "macro_and_micro_both_required": true,
+    "risk_coverage_curve_required": true,
+    "error_clips_required": true
+  },
+  "current_snapshot_2026_08_20": {
+    "queue_rows": 5034,
+    "unique_split_groups": 3290,
+    "public_groups": 2856,
+    "supplier_three_batch_groups": 308,
+    "internal_oss_groups": 126,
+    "human_gold_groups": 0,
+    "gold_target_shortfall": 10000,
+    "current_result_role": "systems_pilot_only"
+  }
+}
