@@ -67,6 +67,7 @@ from .egodex_review_batch import build_egodex_review_batch
 from .multisource_discovery import discover_lerobot_roots
 from .generic_ego import build_generic_ego_views
 from .task_taxonomy import classify_task_records
+from .training_balance import build_training_sampling_weights
 from .storage_safety import assert_derived_output
 from .registry import (
     create_manifest,
@@ -657,6 +658,14 @@ def main() -> None:
     task_taxonomy.add_argument(
         "--taxonomy", type=Path, default=Path("config/task_taxonomy.json")
     )
+    training_weights = sub.add_parser(
+        "build-training-sampling-weights",
+        help="按交互原语、任务文本和原视频组生成 SFT 采样权重",
+    )
+    training_weights.add_argument("--records", type=Path, required=True)
+    training_weights.add_argument("--output", type=Path, required=True)
+    training_weights.add_argument("--minimum-weight", type=float, default=0.25)
+    training_weights.add_argument("--maximum-weight", type=float, default=4.0)
     egodex_candidates.add_argument(
         "--full-profile", action="store_true",
         help="加载完整关节变换；默认仅读 confidence 和视频头以降低 OSS I/O",
@@ -1437,6 +1446,14 @@ def main() -> None:
             args.output,
             task_field=args.task_field,
             source_id=args.source_id,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-training-sampling-weights":
+        summary = build_training_sampling_weights(
+            args.records,
+            args.output,
+            minimum_weight=args.minimum_weight,
+            maximum_weight=args.maximum_weight,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-vitra-undistortion":
