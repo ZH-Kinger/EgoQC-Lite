@@ -141,11 +141,10 @@ def _prompt(task_config: Dict[str, Any], activity: str, frame_count: int) -> str
         f"共有 {frame_count} 帧，候选任务为 {activity or 'unknown'}。\n"
         "问题索引固定为：" + ";".join(task_lines)
         + "\n只输出一行紧凑 JSON，不要 Markdown、解释或代码块。格式必须是："
-        '{"p":[按索引顺序的0到1概率],"s":[按索引顺序的严重度整数],'
-        '"i":{"问题索引":[[0到1归一化开始时间,0到1归一化结束时间]]},'
-        '"c":总体置信度0到1,"a":是否拒答,"e":[证据帧索引]}。'
-        "p和s必须各有与问题数相同的元素；严重度0/1/2/3对应none/minor/major/critical；"
-        "i只写概率大于等于0.05的问题。看不清或证据不足时a=true，不得臆测。"
+        '{"f":[["问题代码",概率0到1,严重度整数0到3,开始时间0到1,结束时间0到1,'
+        '[证据帧索引]]],"c":总体置信度0到1,"a":是否拒答}。'
+        "f只写概率大于等于0.05的问题，完全没有问题时必须写空数组f=[]；"
+        "严重度0/1/2/3对应none/minor/major/critical。看不清或证据不足时a=true，不得臆测。"
     )
 
 
@@ -301,14 +300,21 @@ def benchmark_few_b_vlm(
         parsed, parse_error = parse_structured_response(response)
         task_order = list(task_config.get("model_tasks", {}))
         if parsed is not None:
-            probabilities = parsed.get("p")
-            severities = parsed.get("s")
-            if not isinstance(probabilities, list) or len(probabilities) != len(task_order):
-                parse_error = f"p must contain {len(task_order)} task probabilities"
+            findings = parsed.get("f")
+            if not isinstance(findings, list):
+                parse_error = "f must be a list"
                 parsed = None
-            elif not isinstance(severities, list) or len(severities) != len(task_order):
-                parse_error = f"s must contain {len(task_order)} task severities"
-                parsed = None
+            else:
+                allowed = set(task_order)
+                for finding in findings:
+                    if not isinstance(finding, list) or len(finding) != 6:
+                        parse_error = "every finding must have 6 fields"
+                        parsed = None
+                        break
+                    if finding[0] not in allowed:
+                        parse_error = f"unknown finding code: {finding[0]}"
+                        parsed = None
+                        break
         results.append(
             {
                 "schema_version": SCHEMA_VERSION,
@@ -378,7 +384,7 @@ def benchmark_few_b_vlm(
             "selection_seed": seed,
             "maximum_clips": maximum_clips,
             "max_new_tokens": max_new_tokens,
-            "wire_output_schema": "compact_taxonomy_ordered_arrays_v1",
+            "wire_output_schema": "compact_sparse_findings_v1",
             "task_order": list(task_config.get("model_tasks", {})),
         },
     }
