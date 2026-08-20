@@ -68,3 +68,29 @@ def test_generality_cohort_reports_shortfall_without_reusing_groups(tmp_path: Pa
     assert summary["coverage_gaps"]["systems"] == 9
     assert summary["coverage_gaps"]["external_test"] == 4
     assert summary["coverage_gaps"]["validation"] + summary["coverage_gaps"]["in_domain_test"] == 4
+
+
+def test_generality_cohort_recovers_legacy_oss_dataset_identity(tmp_path: Path) -> None:
+    queue = tmp_path / "queue.jsonl"
+    _write_jsonl(queue, [{
+        "request_id": "legacy",
+        "split_group": "oss-unclassified:raw-video:abc",
+        "source_dataset": "oss-unclassified",
+        "source_class": "supplier_dataset",
+        "selection_source": "control",
+        "raw_source_uri": "/mnt/data/oss/Task_Family/dataset-123/videos/cam/file.mp4",
+    }])
+    protocol = tmp_path / "protocol.json"
+    protocol.write_text(json.dumps({
+        "systems_scale_cohort": {"minimum_unique_clips": 10},
+        "model_development": {"target_unique_train_clips": 0},
+        "human_gold": {"validation": 1, "in_domain_test": 0, "external_source_test": 0},
+    }), encoding="utf-8")
+
+    summary = plan_generality_cohort([queue], protocol, tmp_path / "out")
+    rows = [json.loads(line) for line in (tmp_path / "out/gold-validation-candidates.jsonl").read_text().splitlines()]
+
+    assert summary["systems"]["source_datasets"] == {"oss:dataset-123": 1}
+    assert rows[0]["task_family"] == "Task_Family"
+    assert rows[0]["source_origin_status"] == "unclassified"
+    assert rows[0]["source_class"] == "unclassified_mounted_dataset"

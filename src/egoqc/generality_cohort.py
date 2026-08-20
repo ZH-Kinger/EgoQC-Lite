@@ -97,6 +97,34 @@ def _summary(rows: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _recover_source_identity(source: Mapping[str, Any]) -> Dict[str, Any]:
+    """Recover dataset/task identity hidden by legacy oss-unclassified queues."""
+
+    row = dict(source)
+    if str(row.get("source_dataset")) != "oss-unclassified":
+        return row
+    uri = str(row.get("raw_source_uri") or row.get("source_uri") or "")
+    parts = Path(uri).parts
+    try:
+        oss_index = parts.index("oss")
+        task_family = parts[oss_index + 1]
+        dataset_id = parts[oss_index + 2]
+    except (ValueError, IndexError):
+        return row
+    if not task_family or not dataset_id:
+        return row
+    row.update({
+        "source_dataset_original": "oss-unclassified",
+        "source_dataset": f"oss:{dataset_id}",
+        "task_family": task_family,
+        "source_class_original": row.get("source_class"),
+        "source_class": "unclassified_mounted_dataset",
+        "source_origin_status": "unclassified",
+        "source_identity_inferred_from_uri": True,
+    })
+    return row
+
+
 def plan_generality_cohort(
     queues: Sequence[Path],
     protocol: Path,
@@ -126,7 +154,7 @@ def plan_generality_cohort(
 
     input_rows: List[Dict[str, Any]] = []
     for queue in queues:
-        input_rows.extend(_read_jsonl(queue))
+        input_rows.extend(_recover_source_identity(row) for row in _read_jsonl(queue))
     representatives, dropped = _representatives(input_rows, seed)
     external_classes = set(external_source_classes)
     external = [row for row in representatives if str(row.get("source_class")) in external_classes]
