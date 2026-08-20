@@ -137,6 +137,7 @@ def merge_teacher_queues(
     *,
     maximum_requests: Optional[int] = None,
     seed: int = 17,
+    one_per_split_group: bool = False,
 ) -> Dict[str, Any]:
     """Deduplicate and round-robin teacher requests across source and recall strata."""
 
@@ -158,6 +159,21 @@ def merge_teacher_queues(
                 duplicates += 1
                 continue
             unique[request_id] = row
+
+    input_unique_requests = len(unique)
+    dropped_split_group_duplicates = 0
+    if one_per_split_group:
+        group_unique: Dict[str, Dict[str, Any]] = {}
+        ranked = sorted(
+            unique.values(), key=lambda row: _rank(str(row["request_id"]), seed)
+        )
+        for row in ranked:
+            split_group = str(row.get("split_group") or row["request_id"])
+            if split_group in group_unique:
+                dropped_split_group_duplicates += 1
+                continue
+            group_unique[split_group] = row
+        unique = {str(row["request_id"]): row for row in group_unique.values()}
 
     strata: Dict[Tuple[str, str], Deque[Dict[str, Any]]] = {}
     grouped: Dict[Tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
@@ -201,7 +217,10 @@ def merge_teacher_queues(
     summary = {
         "schema_version": SCHEMA_VERSION,
         "input_queues": [str(path.expanduser().resolve()) for path in queues],
-        "input_unique_requests": len(unique),
+        "input_unique_requests": input_unique_requests,
+        "requests_after_split_group_deduplication": len(unique),
+        "one_per_split_group": one_per_split_group,
+        "dropped_split_group_duplicates": dropped_split_group_duplicates,
         "duplicate_requests": duplicates,
         "selected_requests": len(selected),
         "maximum_requests": maximum_requests,

@@ -51,6 +51,26 @@ def test_merge_teacher_queues_round_robins_source_and_selection(tmp_path: Path) 
     assert len({row["request_id"] for row in rows}) == 8
 
 
+def test_merge_teacher_queues_can_keep_one_clip_per_split_group(tmp_path: Path) -> None:
+    queue = tmp_path / "queue.jsonl"
+    _write_queue(queue, "source-a", "positive", 8)
+    summary = merge_teacher_queues(
+        [queue],
+        tmp_path / "grouped",
+        maximum_requests=8,
+        seed=9,
+        one_per_split_group=True,
+    )
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "grouped/teacher-api-queue.jsonl").read_text().splitlines()
+    ]
+    assert summary["input_unique_requests"] == 8
+    assert summary["selected_requests"] == 4
+    assert summary["dropped_split_group_duplicates"] == 4
+    assert len({row["split_group"] for row in rows}) == len(rows)
+
+
 def test_build_overlay_teacher_queue_preserves_raw_provenance(tmp_path: Path) -> None:
     overlay = tmp_path / "overlay.mp4"
     overlay.write_bytes(b"derived")

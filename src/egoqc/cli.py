@@ -448,6 +448,11 @@ def main() -> None:
     queue_merge.add_argument("queues", type=Path, nargs="+")
     queue_merge.add_argument("--output", type=Path, required=True)
     queue_merge.add_argument("--maximum-requests", type=int)
+    queue_merge.add_argument(
+        "--one-per-split-group",
+        action="store_true",
+        help="同一原视频/采集组只保留一个 clip，避免样本量和 API 成本虚增",
+    )
     queue_merge.add_argument("--seed", type=int, default=17)
     queue_normalize = sub.add_parser(
         "normalize-teacher-queue",
@@ -1177,6 +1182,7 @@ def main() -> None:
             args.output,
             maximum_requests=args.maximum_requests,
             seed=args.seed,
+            one_per_split_group=args.one_per_split_group,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "normalize-teacher-queue":
