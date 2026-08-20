@@ -43,6 +43,7 @@ from .distillation import (
 from .research_evaluation import evaluate_qc_research_protocol
 from .model_ablation import plan_model_ablation
 from .few_b_benchmark import benchmark_few_b_vlm
+from .few_b_comparison import compare_few_b_benchmarks
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
@@ -403,6 +404,15 @@ def main() -> None:
         choices=("stable_random", "balanced_weak"),
         default="stable_random",
     )
+    few_b_compare = sub.add_parser(
+        "compare-few-b-benchmarks",
+        help="汇总同协议 2B/4B/8B 速度、显存、格式覆盖率和弱教师一致性",
+    )
+    few_b_compare.add_argument(
+        "--benchmark-root", type=Path, action="append", required=True, dest="benchmark_roots"
+    )
+    few_b_compare.add_argument("--teacher-manifest", type=Path, required=True)
+    few_b_compare.add_argument("--output", type=Path, required=True)
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -1105,6 +1115,13 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens,
             seed=args.seed,
             selection_strategy=args.selection_strategy,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "compare-few-b-benchmarks":
+        summary = compare_few_b_benchmarks(
+            args.benchmark_roots,
+            args.teacher_manifest,
+            args.output,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":
