@@ -92,6 +92,24 @@ class TaskTaxonomyTests(unittest.TestCase):
             self.assertFalse(queue["video_required"])
             self.assertEqual(queue["status"], "pending")
 
+    def test_batch_accepts_lerobot_task_lists(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "records.jsonl"
+            output = root / "output"
+            source.write_text(json.dumps({"tasks": ["折叠纸张"]}) + "\n")
+            summary = classify_task_records(
+                source,
+                Path("config/task_taxonomy.json"),
+                output,
+                task_field="tasks",
+                source_id="test-list",
+            )
+            row = json.loads((output / "records-with-taxonomy.jsonl").read_text())
+            self.assertEqual(summary["unique_tasks"], 1)
+            self.assertEqual(row["task_taxonomy"]["task_text"], "折叠纸张")
+            self.assertIn("fold_unfold", row["task_taxonomy"]["interaction_primitives"])
+
 
 if __name__ == "__main__":
     unittest.main()

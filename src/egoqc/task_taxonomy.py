@@ -83,6 +83,13 @@ def classify_task_records(
         if raw in (None, ""):
             missing += 1
             task = "unknown"
+        elif isinstance(raw, list):
+            values = [str(value).strip() for value in raw if str(value).strip()]
+            if not values:
+                missing += 1
+                task = "unknown"
+            else:
+                task = "；".join(values)
         else:
             task = str(raw)
         label = unique.setdefault(task, classify_task(task, taxonomy))
