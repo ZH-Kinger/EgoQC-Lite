@@ -297,6 +297,36 @@ def _artifact_fingerprint(model_path: Path) -> Dict[str, Any]:
     return {"sha256": digest.hexdigest(), "bytes": total, "files": len(files)}
 
 
+def _load_resumable_results(
+    output: Path,
+    rows: Sequence[Dict[str, Any]],
+    *,
+    frame_count: int,
+    maximum_edge: int,
+) -> List[Dict[str, Any]]:
+    partial = output / "predictions.partial.jsonl"
+    if not partial.is_file():
+        return []
+    allowed = {
+        str(row.get("video_id") or row.get("request_id") or row.get("record_id") or "")
+        for row in rows
+    }
+    resumed: List[Dict[str, Any]] = []
+    seen = set()
+    for result in _read_jsonl(partial):
+        identity = str(result.get("video_id") or result.get("record_id") or "")
+        if (
+            identity
+            and identity in allowed
+            and identity not in seen
+            and int(result.get("frame_count") or 0) == frame_count
+            and int(result.get("maximum_edge") or 0) == maximum_edge
+        ):
+            resumed.append(result)
+            seen.add(identity)
+    return resumed
+
+
 def _prompt(task_config: Dict[str, Any], activity: str, frame_count: int) -> str:
     tasks = list(task_config.get("model_tasks", {}).items())
     task_lines = [f"{index}={code}({spec.get('label', code)})" for index, (code, spec) in enumerate(tasks)]
@@ -372,6 +402,7 @@ def benchmark_few_b_vlm(
     max_new_tokens: int = 256,
     seed: int = 17,
     selection_strategy: str = "stable_random",
+    resume: bool = False,
 ) -> Dict[str, Any]:
     """Run a small, fully traced inference benchmark. It never computes accuracy."""
 
@@ -403,6 +434,26 @@ def benchmark_few_b_vlm(
     if not rows:
         raise ValueError("manifest has no locally readable source_uri rows")
     task_config = json.loads(task_config_path.expanduser().read_text(encoding="utf-8"))
+    results = (
+        _load_resumable_results(
+            output,
+            rows,
+            frame_count=frame_count,
+            maximum_edge=maximum_edge,
+        )
+        if resume
+        else []
+    )
+    resumed_ids = {
+        str(result.get("video_id") or result.get("record_id") or "")
+        for result in results
+    }
+    pending_rows = [
+        row
+        for row in rows
+        if str(row.get("video_id") or row.get("request_id") or row.get("record_id") or "")
+        not in resumed_ids
+    ]
     fingerprint_started = time.perf_counter()
     artifact = _artifact_fingerprint(model_path)
     artifact["fingerprint_seconds"] = time.perf_counter() - fingerprint_started
@@ -422,9 +473,9 @@ def benchmark_few_b_vlm(
     model_memory_mb = (
         torch.cuda.memory_allocated() / 1024**2 if device == "cuda" else None
     )
-    results: List[Dict[str, Any]] = []
     inference_started = time.perf_counter()
-    for row in rows:
+    newly_completed = 0
+    for row in pending_rows:
         source = Path(str(row["source_uri"])).expanduser().resolve()
         start_s, end_s = _clip_window(row)
         clip_started = time.perf_counter()
@@ -501,6 +552,7 @@ def benchmark_few_b_vlm(
                 "label_role": "unscored_prediction_not_gold",
             }
         )
+        newly_completed += 1
         elapsed = time.perf_counter() - inference_started
         completed = len(results)
         write_jsonl(output / "predictions.partial.jsonl", results)
@@ -511,9 +563,10 @@ def benchmark_few_b_vlm(
                 "status": "running",
                 "completed_clips": completed,
                 "total_clips": len(rows),
+                "resumed_clips": len(resumed_ids),
                 "elapsed_seconds": elapsed,
-                "average_seconds_per_clip": elapsed / completed,
-                "eta_seconds": elapsed / completed * (len(rows) - completed),
+                "average_seconds_per_new_clip": elapsed / newly_completed,
+                "eta_seconds": elapsed / newly_completed * (len(rows) - completed),
                 "structured_json_valid_clips": sum(
                     int(item["structured_json_valid"]) for item in results
                 ),
@@ -546,6 +599,7 @@ def benchmark_few_b_vlm(
         "model_load_seconds": load_seconds,
         "model_memory_mb": model_memory_mb,
         "clips": len(results),
+        "resumed_clips": len(resumed_ids),
         "source_counts": source_counts,
         "selection_counts": selection_counts,
         "successful_clips": len(results),
@@ -576,6 +630,7 @@ def benchmark_few_b_vlm(
             "selection_seed": seed,
             "selection_strategy": selection_strategy,
             "maximum_clips": maximum_clips,
+            "resume": resume,
             "max_new_tokens": max_new_tokens,
             "wire_output_schema": "compact_sparse_findings_v1",
             "task_order": list(task_config.get("model_tasks", {})),
@@ -590,6 +645,7 @@ def benchmark_few_b_vlm(
             "status": "completed",
             "completed_clips": len(results),
             "total_clips": len(results),
+            "resumed_clips": len(resumed_ids),
             "elapsed_seconds": total_seconds,
             "eta_seconds": 0.0,
             "structured_json_valid_clips": report["structured_json_valid_clips"],

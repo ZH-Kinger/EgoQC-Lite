@@ -417,6 +417,11 @@ def main() -> None:
         choices=("stable_random", "balanced_weak"),
         default="stable_random",
     )
+    few_b_benchmark.add_argument(
+        "--resume",
+        action="store_true",
+        help="从同输出目录中协议一致的 predictions.partial.jsonl 继续",
+    )
     few_b_freeze = sub.add_parser(
         "freeze-few-b-samples",
         help="先冻结 few-B 容量实验样本和哈希，不运行模型",
@@ -1156,6 +1161,7 @@ def main() -> None:
             max_new_tokens=args.max_new_tokens,
             seed=args.seed,
             selection_strategy=args.selection_strategy,
+            resume=args.resume,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "freeze-few-b-samples":

@@ -6,6 +6,7 @@ import numpy as np
 
 from egoqc.few_b_benchmark import (
     _clip_window,
+    _load_resumable_results,
     _sample_video_frames,
     freeze_few_b_samples,
     normalize_sparse_findings,
@@ -98,6 +99,27 @@ def test_sample_video_frames_decodes_one_forward_window(tmp_path: Path) -> None:
     assert len(frames) == 8
     means = [float(np.asarray(frame).mean()) for frame in frames]
     assert means == sorted(means)
+
+
+def test_resume_only_accepts_same_protocol_and_selected_ids(tmp_path: Path) -> None:
+    output = tmp_path / "out"
+    output.mkdir()
+    rows = [{"request_id": "keep"}, {"request_id": "pending"}]
+    (output / "predictions.partial.jsonl").write_text(
+        "".join(
+            json.dumps(row) + "\n"
+            for row in [
+                {"video_id": "keep", "frame_count": 8, "maximum_edge": 448},
+                {"video_id": "wrong-edge", "frame_count": 8, "maximum_edge": 640},
+                {"video_id": "not-selected", "frame_count": 8, "maximum_edge": 448},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    resumed = _load_resumable_results(output, rows, frame_count=8, maximum_edge=448)
+
+    assert [row["video_id"] for row in resumed] == ["keep"]
 
 
 def test_freeze_few_b_samples_writes_balanced_hashed_manifest(tmp_path: Path) -> None:
