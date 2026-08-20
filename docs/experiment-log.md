@@ -21,6 +21,7 @@
 | 供应商本地 8B | 434 / 434 clips | 434 条结构化 JSON 全部有效；最终结果 SHA-256 已记录 |
 | 新增本地弱标签池 | 434 | 206 条高置信 train-only；228 条进入人工复检 |
 | 已准备弱/合成训练记录 | 10,018 + 434 | 只能进入 train，不能进入 validation/test；需去重后统计最终量 |
+| 新增跨组训练候选 | 30,000 clips / 864 groups | 尚未获得视觉教师或人工标签；与 3,290 个评测候选组零交叉 |
 | 人工 Gold | 0 | 正式准确率、99% precision 和自动拒收均未解锁 |
 | 外部供应商 API 调用 | 0 | 434 条供应商候选未发送给外部 API |
 
@@ -257,3 +258,30 @@ P50/P95、吞吐、CPU/GPU/内存：
 - 处置：暂停远端 cohort 生成；保护逻辑改为原始子命名空间 + 设备号/inode 别名识别；后续派生产物统一进入 `/mnt/workspace/egoqc-derived`。
 - 本轮远端动作：仅只读执行 `realpath`、`stat`、`findmnt`、一级目录枚举；此前只更新了 `/mnt/workspace/ie-qc-code` 代码，尚未运行 cohort 规划器。
 - 首次 inode 自检发现 `/mnt/data/oss` 是覆盖在共享根上的独立 OSS 子挂载，而 `/mnt/workspace/oss` 指向底层 CPFS 目录；两者子目录 inode 不同。保护逻辑因此进一步加入“声明式挂载根别名 + 相对路径映射”，即使子挂载遮蔽了 inode 关系，也拒绝两个拼法下的 raw 命名空间。
+
+## EXP-017：跨来源独立组 cohort v2
+
+- 输入：三类现有候选队列，共 5,034 clips。
+- 结果：按原视频组去重后为 3,290 组，删除 1,744 个同组重复 clip；split 间交集为 0。
+- 来源恢复：公共 EgoDex 2,856 组；三批供应商 308 组；旧 `oss-unclassified` 恢复为 126 个数据集 ID，并保留 `unclassified_mounted_dataset` 状态。
+- Gold 候选：validation 181、同域 test 253、外部来源 test 2,856；这些仍是待人工标注候选，人工 Gold 增量为 0。
+- 重要结论：完整留源后没有剩余训练组，说明不能从当前评测候选中挪用训练数据。
+- 证据：开发机 `/mnt/workspace/egoqc-derived/generality-v2/summary.json`，SHA-256 `9b5f5ef402b7b3abfe456e55eb7bb6ffc517d311a57b1b4183d29ceb582d6391`。
+
+## EXP-018：100k-video 系统吞吐 cohort
+
+- 输入：EgoDex 只读 inventory，334,991 个唯一视频，118 个任务。
+- 输出：100,000 行系统 cohort，83,331,119 bytes；文件 SHA-256 `223e514018146fbbcdeb3884978c5836ac0ce0069cd95c0ef2005c0b8054794c`。
+- 任务覆盖：118 类；每任务被选数量最少 7、最多 960，差异来自原始任务库存不均衡。
+- 治理：每条均为 `training_eligible=false`、`accuracy_evaluation_eligible=false`，仅供吞吐、缓存、失败恢复和规模外推实验。
+- 产物：开发机 `/mnt/workspace/egoqc-derived/egodex-systems-100k-v1/systems-cohort.jsonl`；未解码视频、未调用 API、未写 raw。
+
+## EXP-019：30k 训练候选扩展
+
+- 来源隔离：只使用未进入当前 Gold 候选的三个供应商批次；已留出的三个批次和 EgoDex 不进入训练。
+- 构成：30,000 clips / 864 `split_group`，其中规则异常候选 24,000、对照 6,000；候选视频时长 44.61 小时。
+- 组内密度：每组最少 1、中位数 28、P95 98、最多 128 clips。组内样本可共同进入 train，但不得跨 validation/test。
+- 泄漏审计：train 864 groups 与评测候选 3,290 groups 交集为 0，检查通过。
+- 队列：220,922,471 bytes，SHA-256 `bc1ef2d208387487a41ff2789cab3c74bf5c6fb6eec95fffe4a97dc9fd855495`。
+- 当前边界：这是待标注训练候选，尚未调用视觉教师、尚未形成 30,000 条训练标签，也不能用于报告准确率。
+- 产物：开发机 `/mnt/workspace/egoqc-derived/train-expansion-v1/merged/teacher-api-queue.jsonl`。
