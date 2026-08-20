@@ -134,20 +134,18 @@ def _artifact_fingerprint(model_path: Path) -> Dict[str, Any]:
 
 
 def _prompt(task_config: Dict[str, Any], activity: str, frame_count: int) -> str:
-    task_lines = [
-        f'- {code}: {spec.get("label", code)}'
-        for code, spec in task_config.get("model_tasks", {}).items()
-    ]
+    tasks = list(task_config.get("model_tasks", {}).items())
+    task_lines = [f"{index}={code}({spec.get('label', code)})" for index, (code, spec) in enumerate(tasks)]
     return (
         "你是第一人称具身数据的视觉质检器。下面是一个按时间均匀抽取的短视频片段，"
         f"共有 {frame_count} 帧，候选任务为 {activity or 'unknown'}。\n"
-        "逐项判断以下问题：\n"
-        + "\n".join(task_lines)
-        + "\n只输出一个 JSON 对象，不要 Markdown。格式必须是："
-        '{"tasks":{"问题代码":{"probability":0到1,"severity":"none|minor|major|critical",'
-        '"intervals":[[0到1归一化开始时间,0到1归一化结束时间]]}},'
-        '"confidence":0到1,"abstain":true或false,"evidence_frame_indices":[整数]}。'
-        "看不清或证据不足时必须 abstain=true，不得臆测。"
+        "问题索引固定为：" + ";".join(task_lines)
+        + "\n只输出一行紧凑 JSON，不要 Markdown、解释或代码块。格式必须是："
+        '{"p":[按索引顺序的0到1概率],"s":[按索引顺序的严重度整数],'
+        '"i":{"问题索引":[[0到1归一化开始时间,0到1归一化结束时间]]},'
+        '"c":总体置信度0到1,"a":是否拒答,"e":[证据帧索引]}。'
+        "p和s必须各有与问题数相同的元素；严重度0/1/2/3对应none/minor/major/critical；"
+        "i只写概率大于等于0.05的问题。看不清或证据不足时a=true，不得臆测。"
     )
 
 
@@ -301,6 +299,16 @@ def benchmark_few_b_vlm(
             clean_up_tokenization_spaces=False,
         )[0]
         parsed, parse_error = parse_structured_response(response)
+        task_order = list(task_config.get("model_tasks", {}))
+        if parsed is not None:
+            probabilities = parsed.get("p")
+            severities = parsed.get("s")
+            if not isinstance(probabilities, list) or len(probabilities) != len(task_order):
+                parse_error = f"p must contain {len(task_order)} task probabilities"
+                parsed = None
+            elif not isinstance(severities, list) or len(severities) != len(task_order):
+                parse_error = f"s must contain {len(task_order)} task severities"
+                parsed = None
         results.append(
             {
                 "schema_version": SCHEMA_VERSION,
@@ -370,6 +378,8 @@ def benchmark_few_b_vlm(
             "selection_seed": seed,
             "maximum_clips": maximum_clips,
             "max_new_tokens": max_new_tokens,
+            "wire_output_schema": "compact_taxonomy_ordered_arrays_v1",
+            "task_order": list(task_config.get("model_tasks", {})),
         },
     }
     write_jsonl(output / "predictions.jsonl", results)
