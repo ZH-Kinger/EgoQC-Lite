@@ -568,9 +568,23 @@ class ReviewStore:
 
 
 def load_event_file(path: Path) -> list[Dict[str, Any]]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, list):
-        raise ValueError("events 文件必须是 JSON 数组")
+    text = path.read_text(encoding="utf-8")
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        data = []
+        for line_number, line in enumerate(text.splitlines(), 1):
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"events JSONL 第 {line_number} 行无效") from error
+            data.append(event)
+    else:
+        if not isinstance(value, list):
+            raise ValueError("events 文件必须是 JSON 数组或 JSONL")
+        data = value
     required = {"event_id", "video_id", "kind", "start_s", "end_s", "duration_s"}
     for index, event in enumerate(data):
         if not isinstance(event, dict) or not required.issubset(event):

@@ -197,6 +197,31 @@ def test_load_event_file_validates_required_fields(tmp_path):
         load_event_file(path)
 
 
+def test_load_event_file_accepts_jsonl(tmp_path):
+    path = tmp_path / "events.jsonl"
+    events = [
+        {
+            "event_id": "event-a",
+            "video_id": "video-a",
+            "kind": "gold_review",
+            "start_s": 0.0,
+            "end_s": 1.0,
+            "duration_s": 1.0,
+        },
+        {
+            "event_id": "event-b",
+            "video_id": "video-b",
+            "kind": "gold_review",
+            "start_s": 1.0,
+            "end_s": 2.0,
+            "duration_s": 1.0,
+        },
+    ]
+    path.write_text("".join(json.dumps(event) + "\n" for event in events))
+
+    assert load_event_file(path) == events
+
+
 def test_error_taxonomy_and_type_filter_are_exposed():
     description = describe_error("persistent_extra_hands")
     assert description["category"] == "multi_person"
