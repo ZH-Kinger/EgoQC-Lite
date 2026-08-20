@@ -19,6 +19,8 @@ def test_cpu_gpu_student_deployment_contract_is_consistent() -> None:
     assert contract["profiles"]["gpu_fp16"]["precision"] == "fp16"
     assert contract["accuracy_gates"]["abstention_required"] is True
     assert contract["accuracy_gates"]["forced_binary_decision"] is False
+    assert contract["benchmark_contract"]["runtime_parity_uses_identical_canonical_input"] is True
+    assert contract["accuracy_gates"]["threshold_reselection_on_test_forbidden"] is True
     assert (
         experiments["student_system"]["deployment_contract"]
         == "config/qc_student_deployment_v1.json"

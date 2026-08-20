@@ -63,7 +63,8 @@ precision、完成概率校准和跨供应商测试后，才能为某个 task �
 ONNX Runtime/OpenVINO，GPU 使用 FP16 PyTorch/ONNX Runtime/TensorRT；二者必须在同一 Gold
 集合上做输出一致性和决策一致性测试。CPU 默认 16×160 全局帧和 16×128 手部 ROI，GPU
 默认 32×224 全局帧和 32×160 手部 ROI。输入分辨率和帧数可以不同，但 taxonomy、权重、
-概率校准口径和拒答策略必须一致。
+概率校准协议和拒答策略必须一致。CPU/GPU profile 可在同一份冻结 validation 上分别选择
+阈值，但阈值必须在 test 前冻结，禁止用 test 重新调参。
 
 QC student 不训练 8B 级通用大模型。默认输入从原始视频在线缩放为 192×192，并采用
 letterbox 保留完整第一视角画面，避免方形中心裁剪删除画面边缘或底部的手；每 4 个已解码帧
@@ -76,7 +77,8 @@ MoViNet-A0-Stream 作为 challenger；先冻结编码器训练 head，效果不�
 模型“小”不以 checkpoint 文件名判断。每次发布必须同时记录参数量、INT8/FP16 体积、
 峰值 RSS/显存、含视频解码的 P50/P95 延迟和 video-hours/wall-hour。若 INT8 相比 FP32 在
 同一阈值口径下 recall 下降超过 1 个百分点，CPU 自动决策保持关闭；若 CPU/GPU 决策分歧
-超过 0.1%，先修复预处理、量化或算子差异，不能分别调阈值掩盖不一致。
+在相同 canonical 输入上超过 0.1%，先修复预处理、量化或算子差异，不能分别调阈值掩盖
+运行时不一致。CPU 低分辨率 profile 与 GPU 高分辨率 profile 的效果差异则单独报告。
 
 ## Gold Set 门禁
 
