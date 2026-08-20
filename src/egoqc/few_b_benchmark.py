@@ -8,7 +8,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .provenance import code_version
 from .report import write_json, write_jsonl
@@ -480,12 +480,51 @@ def _load_resumable_results(
     return resumed
 
 
-def _prompt(task_config: Dict[str, Any], activity: str, frame_count: int) -> str:
+def _activity_text(row: Mapping[str, Any]) -> str:
+    direct = row.get("task_id") or row.get("task")
+    if direct not in (None, ""):
+        return str(direct)
+    for field in ("activities", "tasks"):
+        values = row.get(field)
+        if isinstance(values, list):
+            text = "；".join(str(value).strip() for value in values if str(value).strip())
+            if text:
+                return text
+        elif values not in (None, ""):
+            return str(values)
+    return "unknown"
+
+
+def _overlay_available(row: Mapping[str, Any]) -> bool:
+    capabilities = row.get("capability_context") or {}
+    evidence = row.get("visual_evidence") or {}
+    return bool(
+        capabilities.get("mano_overlay")
+        or capabilities.get("overlay_available")
+        or evidence.get("overlay_video")
+        or evidence.get("annotated_video")
+    )
+
+
+def _prompt(
+    task_config: Dict[str, Any],
+    activity: str,
+    frame_count: int,
+    *,
+    overlay_available: bool,
+) -> str:
     tasks = list(task_config.get("model_tasks", {}).items())
     task_lines = [f"{index}={code}({spec.get('label', code)})" for index, (code, spec) in enumerate(tasks)]
+    capability_instruction = (
+        "当前输入包含MANO骨骼或mesh叠加，可判断mano_overlay_drift。"
+        if overlay_available
+        else "当前输入只有原始RGB，不含MANO骨骼或mesh叠加；不得输出mano_overlay_drift。"
+    )
     return (
         "你是第一人称具身数据的视觉质检器。下面是一个按时间均匀抽取的短视频片段，"
         f"共有 {frame_count} 帧，候选任务为 {activity or 'unknown'}。\n"
+        + capability_instruction
+        + "数值速度、相机位姿和MANO参数等不可见信号由外部规则判断，不得从RGB臆测。\n"
         "问题索引固定为：" + ";".join(task_lines)
         + "\n只输出一行紧凑 JSON，不要 Markdown、解释或代码块。格式必须是："
         '{"f":[[问题索引整数,概率0到1,严重度整数0到3,开始时间0到1,结束时间0到1,'
@@ -647,8 +686,13 @@ def benchmark_few_b_vlm(
         require_frame_cache=require_frame_cache,
     ):
         clip_started = time.perf_counter()
-        activity = str(row.get("task_id") or (row.get("activities") or [""])[0])
-        prompt = _prompt(task_config, activity, frame_count)
+        activity = _activity_text(row)
+        prompt = _prompt(
+            task_config,
+            activity,
+            frame_count,
+            overlay_available=_overlay_available(row),
+        )
         preprocess_started = time.perf_counter()
         try:
             inputs = _prepare_model_inputs(
@@ -821,6 +865,7 @@ def benchmark_few_b_vlm(
             "require_frame_cache": require_frame_cache,
             "max_new_tokens": max_new_tokens,
             "wire_output_schema": "compact_sparse_findings_v1",
+            "prompt_version": "capability_guarded_rgb_v2",
             "task_order": list(task_config.get("model_tasks", {})),
         },
     }

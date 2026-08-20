@@ -5,6 +5,8 @@ import av
 import numpy as np
 
 from egoqc.few_b_benchmark import (
+    _activity_text,
+    _prompt,
     _clip_window,
     _load_resumable_results,
     _prefetched_decodes,
@@ -15,6 +17,17 @@ from egoqc.few_b_benchmark import (
     parse_structured_response,
     select_benchmark_rows,
 )
+
+
+def test_prompt_reads_lerobot_tasks_and_guards_missing_overlay() -> None:
+    task_config = json.loads(Path("config/visual_model_tasks.json").read_text())
+    activity = _activity_text({"tasks": ["把杯子放到桌上"]})
+    prompt = _prompt(task_config, activity, 8, overlay_available=False)
+
+    assert activity == "把杯子放到桌上"
+    assert "把杯子放到桌上" in prompt
+    assert "不得输出mano_overlay_drift" in prompt
+    assert "不可见信号由外部规则判断" in prompt
 
 
 def _write_video(path: Path, frames: int = 180) -> None:
