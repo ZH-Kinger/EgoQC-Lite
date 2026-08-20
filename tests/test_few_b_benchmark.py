@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from egoqc.few_b_benchmark import parse_structured_response, select_benchmark_rows
+from egoqc.few_b_benchmark import (
+    normalize_sparse_findings,
+    parse_structured_response,
+    select_benchmark_rows,
+)
 
 
 def test_parse_structured_response_accepts_plain_and_fenced_json() -> None:
@@ -27,3 +31,13 @@ def test_select_benchmark_rows_is_deterministic_and_requires_local_media(tmp_pat
     second = select_benchmark_rows(list(reversed(rows)), 2, 17)
     assert [row["video_id"] for row in first] == [row["video_id"] for row in second]
     assert len(first) == 2
+
+
+def test_normalize_sparse_findings_maps_indices_and_preserves_codes() -> None:
+    normalized, error = normalize_sparse_findings(
+        {"f": [["1", 0.8, 2, 0.1, 0.4, [2]], ["first", 0.5, 1, 0, 1, [0]]]},
+        ["first", "second"],
+    )
+    assert error is None
+    assert normalized["f"][0][0] == "second"
+    assert normalized["f"][1][0] == "first"

@@ -117,6 +117,48 @@ def parse_structured_response(text: str) -> Tuple[Optional[Dict[str, Any]], Opti
     return parsed, None
 
 
+def normalize_sparse_findings(
+    parsed: Dict[str, Any], task_order: Sequence[str]
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    findings = parsed.get("f")
+    if not isinstance(findings, list):
+        return None, "f must be a list"
+    allowed = set(task_order)
+    normalized = dict(parsed)
+    normalized_findings = []
+    for finding in findings:
+        if not isinstance(finding, list) or len(finding) != 6:
+            return None, "every finding must have 6 fields"
+        code_or_index = finding[0]
+        code: Optional[str] = None
+        if isinstance(code_or_index, int):
+            if 0 <= code_or_index < len(task_order):
+                code = task_order[code_or_index]
+        elif isinstance(code_or_index, str):
+            if code_or_index in allowed:
+                code = code_or_index
+            elif code_or_index.isdigit():
+                index = int(code_or_index)
+                if 0 <= index < len(task_order):
+                    code = task_order[index]
+        if code is None:
+            return None, f"unknown finding code or index: {code_or_index}"
+        normalized_findings.append([code, *finding[1:]])
+    normalized["f"] = normalized_findings
+    return normalized, None
+
+
+def _percentile(values: Sequence[float], quantile: float) -> float:
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        return 0.0
+    position = (len(ordered) - 1) * quantile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
 def _artifact_fingerprint(model_path: Path) -> Dict[str, Any]:
     files = sorted(path for path in model_path.rglob("*") if path.is_file())
     digest = hashlib.sha256()
@@ -141,7 +183,7 @@ def _prompt(task_config: Dict[str, Any], activity: str, frame_count: int) -> str
         f"共有 {frame_count} 帧，候选任务为 {activity or 'unknown'}。\n"
         "问题索引固定为：" + ";".join(task_lines)
         + "\n只输出一行紧凑 JSON，不要 Markdown、解释或代码块。格式必须是："
-        '{"f":[["问题代码",概率0到1,严重度整数0到3,开始时间0到1,结束时间0到1,'
+        '{"f":[[问题索引整数,概率0到1,严重度整数0到3,开始时间0到1,结束时间0到1,'
         '[证据帧索引]]],"c":总体置信度0到1,"a":是否拒答}。'
         "f只写概率大于等于0.05的问题，完全没有问题时必须写空数组f=[]；"
         "严重度0/1/2/3对应none/minor/major/critical。看不清或证据不足时a=true，不得臆测。"
@@ -300,21 +342,7 @@ def benchmark_few_b_vlm(
         parsed, parse_error = parse_structured_response(response)
         task_order = list(task_config.get("model_tasks", {}))
         if parsed is not None:
-            findings = parsed.get("f")
-            if not isinstance(findings, list):
-                parse_error = "f must be a list"
-                parsed = None
-            else:
-                allowed = set(task_order)
-                for finding in findings:
-                    if not isinstance(finding, list) or len(finding) != 6:
-                        parse_error = "every finding must have 6 fields"
-                        parsed = None
-                        break
-                    if finding[0] not in allowed:
-                        parse_error = f"unknown finding code: {finding[0]}"
-                        parsed = None
-                        break
+            parsed, parse_error = normalize_sparse_findings(parsed, task_order)
         results.append(
             {
                 "schema_version": SCHEMA_VERSION,
@@ -370,6 +398,13 @@ def benchmark_few_b_vlm(
         "video_seconds": total_video_seconds,
         "wall_seconds_excluding_model_load": total_seconds,
         "video_hours_per_wall_hour": total_video_seconds / total_seconds if total_seconds else 0.0,
+        "latency_seconds": {
+            "total_p50": _percentile([item["total_seconds"] for item in results], 0.50),
+            "total_p95": _percentile([item["total_seconds"] for item in results], 0.95),
+            "decode_p50": _percentile([item["decode_seconds"] for item in results], 0.50),
+            "preprocess_p50": _percentile([item["preprocess_seconds"] for item in results], 0.50),
+            "generation_p50": _percentile([item["generation_seconds"] for item in results], 0.50),
+        },
         "code_version": code_version(),
         "environment": {
             "platform": platform.platform(),
