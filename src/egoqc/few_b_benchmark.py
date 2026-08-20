@@ -164,25 +164,109 @@ def _sample_video_frames(
 
 
 def _decode_benchmark_row(
-    row: Dict[str, Any], frame_count: int
-) -> Tuple[Path, float, float, List[Any], float]:
+    row: Dict[str, Any],
+    frame_count: int,
+    *,
+    maximum_edge: int = 448,
+    frame_cache_root: Optional[Path] = None,
+    frame_cache_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    require_frame_cache: bool = False,
+) -> Tuple[Path, float, float, List[Any], float, str, Dict[str, int]]:
     source = Path(str(row["source_uri"])).expanduser().resolve()
     before = raw_file_stamp(source)
+    stamp_dict = {
+        "size": before.size,
+        "mtime_ns": before.mtime_ns,
+        "inode": before.inode,
+        "device": before.device,
+    }
     start_s, end_s = _clip_window(row)
+    identity = str(row.get("video_id") or row.get("request_id") or row.get("record_id") or "")
+    cached = (frame_cache_index or {}).get(identity)
+    if cached is not None and frame_cache_root is not None:
+        source_digest = hashlib.sha256(str(source).encode("utf-8")).hexdigest()
+        compatible = (
+            cached.get("source_uri_sha256") == source_digest
+            and cached.get("source_file_stamp") == stamp_dict
+            and abs(float(cached.get("clip_start_s", -1)) - start_s) <= 1e-6
+            and abs(float(cached.get("clip_end_s", -1)) - end_s) <= 1e-6
+            and int(cached.get("frame_count") or 0) == frame_count
+            and int(cached.get("maximum_edge") or 0) == maximum_edge
+        )
+        relative_frames = list(cached.get("frames") or [])
+        frame_paths = [(frame_cache_root / value).resolve() for value in relative_frames]
+        root = frame_cache_root.resolve()
+        compatible = compatible and len(frame_paths) == frame_count and all(
+            root in path.parents and path.is_file() for path in frame_paths
+        )
+        if compatible:
+            from PIL import Image
+
+            started = time.perf_counter()
+            images = []
+            for path in frame_paths:
+                with Image.open(path) as image:
+                    images.append(image.convert("RGB"))
+            assert_raw_file_unchanged(source, before)
+            return (
+                source,
+                start_s,
+                end_s,
+                images,
+                time.perf_counter() - started,
+                "frame_cache",
+                stamp_dict,
+            )
+    if require_frame_cache:
+        raise RuntimeError(f"required frame cache is missing or stale for clip: {identity}")
     started = time.perf_counter()
     frames = _sample_video_frames(source, start_s, end_s, frame_count)
     assert_raw_file_unchanged(source, before)
-    return source, start_s, end_s, frames, time.perf_counter() - started
+    return (
+        source,
+        start_s,
+        end_s,
+        frames,
+        time.perf_counter() - started,
+        "raw_decode",
+        stamp_dict,
+    )
+
+
+def load_frame_cache_index(root: Path) -> Dict[str, Dict[str, Any]]:
+    index_path = root.expanduser().resolve() / "index.jsonl"
+    if not index_path.is_file():
+        return {}
+    records: Dict[str, Dict[str, Any]] = {}
+    for row in _read_jsonl(index_path):
+        identity = str(row.get("video_id") or "")
+        if identity:
+            records[identity] = row
+    return records
 
 
 def _prefetched_decodes(
-    rows: Sequence[Dict[str, Any]], frame_count: int, workers: int
-) -> Iterable[Tuple[Dict[str, Any], Path, float, float, List[Any], float]]:
+    rows: Sequence[Dict[str, Any]],
+    frame_count: int,
+    workers: int,
+    *,
+    maximum_edge: int = 448,
+    frame_cache_root: Optional[Path] = None,
+    frame_cache_index: Optional[Dict[str, Dict[str, Any]]] = None,
+    require_frame_cache: bool = False,
+) -> Iterable[Tuple[Dict[str, Any], Path, float, float, List[Any], float, str, Dict[str, int]]]:
     if workers <= 0:
         raise ValueError("decode workers must be positive")
     if workers == 1:
         for row in rows:
-            yield row, *_decode_benchmark_row(row, frame_count)
+            yield row, *_decode_benchmark_row(
+                row,
+                frame_count,
+                maximum_edge=maximum_edge,
+                frame_cache_root=frame_cache_root,
+                frame_cache_index=frame_cache_index,
+                require_frame_cache=require_frame_cache,
+            )
         return
     iterator = iter(rows)
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="egoqc-decode") as executor:
@@ -192,7 +276,20 @@ def _prefetched_decodes(
                 row = next(iterator)
             except StopIteration:
                 break
-            pending.append((row, executor.submit(_decode_benchmark_row, row, frame_count)))
+            pending.append(
+                (
+                    row,
+                    executor.submit(
+                        _decode_benchmark_row,
+                        row,
+                        frame_count,
+                        maximum_edge=maximum_edge,
+                        frame_cache_root=frame_cache_root,
+                        frame_cache_index=frame_cache_index,
+                        require_frame_cache=require_frame_cache,
+                    ),
+                )
+            )
         while pending:
             row, future = pending.popleft()
             yield row, *future.result()
@@ -201,7 +298,18 @@ def _prefetched_decodes(
             except StopIteration:
                 continue
             pending.append(
-                (next_row, executor.submit(_decode_benchmark_row, next_row, frame_count))
+                (
+                    next_row,
+                    executor.submit(
+                        _decode_benchmark_row,
+                        next_row,
+                        frame_count,
+                        maximum_edge=maximum_edge,
+                        frame_cache_root=frame_cache_root,
+                        frame_cache_index=frame_cache_index,
+                        require_frame_cache=require_frame_cache,
+                    ),
+                )
             )
 
 
@@ -449,6 +557,8 @@ def benchmark_few_b_vlm(
     selection_strategy: str = "stable_random",
     resume: bool = False,
     decode_workers: int = 2,
+    frame_cache: Optional[Path] = None,
+    require_frame_cache: bool = False,
 ) -> Dict[str, Any]:
     """Run a small, fully traced inference benchmark. It never computes accuracy."""
 
@@ -458,6 +568,8 @@ def benchmark_few_b_vlm(
         raise ValueError("device must be cuda or cpu")
     if decode_workers <= 0:
         raise ValueError("decode_workers must be positive")
+    if require_frame_cache and frame_cache is None:
+        raise ValueError("require_frame_cache needs frame_cache")
     try:
         import torch
         import transformers
@@ -482,6 +594,8 @@ def benchmark_few_b_vlm(
     if not rows:
         raise ValueError("manifest has no locally readable source_uri rows")
     task_config = json.loads(task_config_path.expanduser().read_text(encoding="utf-8"))
+    frame_cache_root = frame_cache.expanduser().resolve() if frame_cache else None
+    frame_cache_index = load_frame_cache_index(frame_cache_root) if frame_cache_root else {}
     results = (
         _load_resumable_results(
             output,
@@ -523,8 +637,14 @@ def benchmark_few_b_vlm(
     )
     inference_started = time.perf_counter()
     newly_completed = 0
-    for row, source, start_s, end_s, frames, decode_seconds in _prefetched_decodes(
-        pending_rows, frame_count, decode_workers
+    for row, source, start_s, end_s, frames, decode_seconds, frame_source, _ in _prefetched_decodes(
+        pending_rows,
+        frame_count,
+        decode_workers,
+        maximum_edge=maximum_edge,
+        frame_cache_root=frame_cache_root,
+        frame_cache_index=frame_cache_index,
+        require_frame_cache=require_frame_cache,
     ):
         clip_started = time.perf_counter()
         activity = str(row.get("task_id") or (row.get("activities") or [""])[0])
@@ -584,6 +704,7 @@ def benchmark_few_b_vlm(
                 "frame_count": frame_count,
                 "maximum_edge": maximum_edge,
                 "decode_seconds": decode_seconds,
+                "frame_source": frame_source,
                 "preprocess_seconds": preprocess_seconds,
                 "generation_seconds": generation_seconds,
                 "total_seconds": decode_seconds + time.perf_counter() - clip_started,
@@ -655,6 +776,10 @@ def benchmark_few_b_vlm(
         "clips": len(results),
         "resumed_clips": len(resumed_ids),
         "decode_workers": decode_workers,
+        "frame_source_counts": {
+            source: sum(1 for item in results if item.get("frame_source", "raw_decode") == source)
+            for source in {item.get("frame_source", "raw_decode") for item in results}
+        },
         "source_counts": source_counts,
         "selection_counts": selection_counts,
         "successful_clips": len(results),
@@ -692,6 +817,8 @@ def benchmark_few_b_vlm(
             "maximum_clips": maximum_clips,
             "resume": resume,
             "decode_workers": decode_workers,
+            "frame_cache_enabled": frame_cache_root is not None,
+            "require_frame_cache": require_frame_cache,
             "max_new_tokens": max_new_tokens,
             "wire_output_schema": "compact_sparse_findings_v1",
             "task_order": list(task_config.get("model_tasks", {})),

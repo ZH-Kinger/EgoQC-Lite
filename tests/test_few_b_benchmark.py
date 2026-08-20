@@ -8,6 +8,7 @@ from egoqc.few_b_benchmark import (
     _clip_window,
     _load_resumable_results,
     _prefetched_decodes,
+    load_frame_cache_index,
     _sample_video_frames,
     freeze_few_b_samples,
     normalize_sparse_findings,
@@ -142,6 +143,46 @@ def test_prefetched_decodes_preserve_row_order(tmp_path: Path) -> None:
 
     assert [item[0]["request_id"] for item in decoded] == ["row-0", "row-1"]
     assert all(len(item[4]) == 4 for item in decoded)
+
+
+def test_decode_uses_valid_frame_cache_without_raw_video_decode(tmp_path: Path) -> None:
+    from egoqc.few_b_frame_cache import predecode_few_b_frame_cache
+
+    video = tmp_path / "cache-source.mp4"
+    _write_video(video, frames=180)
+    row = {
+        "request_id": "cached-row",
+        "source_uri": str(video),
+        "clip_start_s": 1.0,
+        "clip_end_s": 3.0,
+        "duration_s": 6.0,
+    }
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    cache = tmp_path / "cache"
+    predecode_few_b_frame_cache(
+        manifest,
+        cache,
+        maximum_clips=1,
+        frame_count=4,
+        maximum_edge=64,
+        workers=1,
+    )
+
+    decoded = list(
+        _prefetched_decodes(
+            [row],
+            frame_count=4,
+            workers=1,
+            maximum_edge=64,
+            frame_cache_root=cache,
+            frame_cache_index=load_frame_cache_index(cache),
+            require_frame_cache=True,
+        )
+    )
+
+    assert decoded[0][6] == "frame_cache"
+    assert len(decoded[0][4]) == 4
 
 
 def test_freeze_few_b_samples_writes_balanced_hashed_manifest(tmp_path: Path) -> None:

@@ -43,6 +43,7 @@ from .distillation import (
 from .research_evaluation import evaluate_qc_research_protocol
 from .model_ablation import plan_model_ablation
 from .few_b_benchmark import benchmark_few_b_vlm, freeze_few_b_samples
+from .few_b_frame_cache import predecode_few_b_frame_cache
 from .few_b_comparison import compare_few_b_benchmarks
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
@@ -407,6 +408,8 @@ def main() -> None:
     few_b_benchmark.add_argument("--maximum-clips", type=int, default=3)
     few_b_benchmark.add_argument("--frame-count", type=int, default=8)
     few_b_benchmark.add_argument("--maximum-edge", type=int, default=448)
+    few_b_benchmark.add_argument("--frame-cache", type=Path)
+    few_b_benchmark.add_argument("--require-frame-cache", action="store_true")
     few_b_benchmark.add_argument(
         "--decode-workers",
         type=int,
@@ -433,6 +436,24 @@ def main() -> None:
         "freeze-few-b-samples",
         help="先冻结 few-B 容量实验样本和哈希，不运行模型",
     )
+    few_b_cache = sub.add_parser(
+        "predecode-few-b-cache",
+        help="把候选 clip 的少量低分辨率帧预解码到派生 workspace 缓存",
+    )
+    few_b_cache.add_argument("--manifest", type=Path, required=True)
+    few_b_cache.add_argument("--output", type=Path, required=True)
+    few_b_cache.add_argument("--maximum-clips", type=int, default=434)
+    few_b_cache.add_argument("--frame-count", type=int, default=8)
+    few_b_cache.add_argument("--maximum-edge", type=int, default=448)
+    few_b_cache.add_argument("--jpeg-quality", type=int, default=82)
+    few_b_cache.add_argument("--workers", type=int, default=8)
+    few_b_cache.add_argument("--seed", type=int, default=20260820)
+    few_b_cache.add_argument(
+        "--selection-strategy",
+        choices=("stable_random", "balanced_weak"),
+        default="stable_random",
+    )
+    few_b_cache.add_argument("--no-resume", action="store_true")
     few_b_freeze.add_argument("--manifest", type=Path, required=True)
     few_b_freeze.add_argument("--output", type=Path, required=True)
     few_b_freeze.add_argument("--maximum-clips", type=int, default=200)
@@ -1167,12 +1188,28 @@ def main() -> None:
             frame_count=args.frame_count,
             maximum_edge=args.maximum_edge,
             decode_workers=args.decode_workers,
+            frame_cache=args.frame_cache,
+            require_frame_cache=args.require_frame_cache,
             device=args.device,
             precision=args.precision,
             max_new_tokens=args.max_new_tokens,
             seed=args.seed,
             selection_strategy=args.selection_strategy,
             resume=args.resume,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "predecode-few-b-cache":
+        summary = predecode_few_b_frame_cache(
+            args.manifest,
+            args.output,
+            maximum_clips=args.maximum_clips,
+            frame_count=args.frame_count,
+            maximum_edge=args.maximum_edge,
+            jpeg_quality=args.jpeg_quality,
+            workers=args.workers,
+            seed=args.seed,
+            selection_strategy=args.selection_strategy,
+            resume=not args.no_resume,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "freeze-few-b-samples":
