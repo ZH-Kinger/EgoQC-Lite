@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from egoqc.generality_cohort import plan_generality_cohort
+from egoqc.generality_cohort import build_egodex_systems_cohort, plan_generality_cohort
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -94,3 +94,30 @@ def test_generality_cohort_recovers_legacy_oss_dataset_identity(tmp_path: Path) 
     assert rows[0]["task_family"] == "Task_Family"
     assert rows[0]["source_origin_status"] == "unclassified"
     assert rows[0]["source_class"] == "unclassified_mounted_dataset"
+
+
+def test_egodex_systems_cohort_is_balanced_and_never_training_eligible(tmp_path: Path) -> None:
+    inventory = tmp_path / "inventory.jsonl"
+    _write_jsonl(inventory, [
+        {
+            "video_path": f"/mnt/data/egodex/train/{task}/{index}.mp4",
+            "task": task,
+            "partition": "train",
+            "episode_id": f"{task}/{index}",
+        }
+        for task in ("task-a", "task-b", "task-c")
+        for index in range(5)
+    ])
+
+    summary = build_egodex_systems_cohort(
+        inventory, tmp_path / "out", maximum_videos=9, seed=3
+    )
+    rows = [json.loads(line) for line in (tmp_path / "out/systems-cohort.jsonl").read_text().splitlines()]
+
+    assert summary["selected_videos"] == 9
+    assert summary["tasks"] == 3
+    assert summary["minimum_task_videos"] == 3
+    assert summary["maximum_task_videos"] == 3
+    assert len({row["split_group"] for row in rows}) == 9
+    assert not any(row["training_eligible"] for row in rows)
+    assert not any(row["accuracy_evaluation_eligible"] for row in rows)

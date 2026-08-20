@@ -235,3 +235,86 @@ def plan_generality_cohort(
     }
     write_json(output / "summary.json", summary)
     return summary
+
+
+def build_egodex_systems_cohort(
+    inventory: Path,
+    output: Path,
+    *,
+    maximum_videos: int = 100_000,
+    clip_duration_s: float = 6.0,
+    seed: int = 53,
+) -> Dict[str, Any]:
+    """Build a task-balanced systems-only cohort from an EgoDex inventory."""
+
+    if maximum_videos < 1:
+        raise ValueError("maximum_videos 必须大于 0")
+    if clip_duration_s <= 0:
+        raise ValueError("clip_duration_s 必须大于 0")
+    output = assert_derived_output(output)
+    rows: List[Dict[str, Any]] = []
+    seen_videos = set()
+    with inventory.expanduser().open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip():
+                continue
+            source = json.loads(line)
+            video = str(source.get("video_path") or "").strip()
+            if not video:
+                raise ValueError(f"{inventory}:{line_number} 缺少 video_path")
+            if video in seen_videos:
+                continue
+            seen_videos.add(video)
+            digest = hashlib.sha256(video.encode("utf-8")).hexdigest()
+            rows.append({
+                "schema_version": "egoqc-systems-cohort-record-v1",
+                "request_id": f"systems-egodex-{digest[:24]}",
+                "split_group": f"egodex:raw-video:{digest[:20]}",
+                "split_group_source": "raw_source_uri",
+                "source_class": "public_dataset",
+                "source_dataset": "egodex",
+                "source_uri": video,
+                "raw_source_uri": video,
+                "task": source.get("task"),
+                "task_family": source.get("task"),
+                "partition": source.get("partition"),
+                "episode_id": source.get("episode_id"),
+                "clip_start_s": 0.0,
+                "clip_end_s": float(clip_duration_s),
+                "clip_window_requires_runtime_clamp": True,
+                "dataset_role": "systems_scale_only_external_holdout_source",
+                "training_eligible": False,
+                "accuracy_evaluation_eligible": False,
+                "human_gold_status": "not_requested",
+                "raw_source_readonly": True,
+            })
+
+    selected, remainder = _stratified_take(
+        [dict(row, selection_source=str(row.get("task") or "unknown_task")) for row in rows],
+        maximum_videos,
+        seed,
+    )
+    for row in selected:
+        row.pop("selection_source", None)
+    artifact = output / "systems-cohort.jsonl"
+    write_jsonl(artifact, selected)
+    task_counts = Counter(str(row.get("task") or "unknown") for row in selected)
+    summary = {
+        "schema_version": "egoqc-egodex-systems-cohort-v1",
+        "inventory": str(inventory.expanduser().resolve()),
+        "inventory_unique_videos": len(rows),
+        "selected_videos": len(selected),
+        "unused_videos": len(remainder),
+        "tasks": len(task_counts),
+        "minimum_task_videos": min(task_counts.values(), default=0),
+        "maximum_task_videos": max(task_counts.values(), default=0),
+        "clip_duration_s": clip_duration_s,
+        "training_eligible": False,
+        "accuracy_evaluation_eligible": False,
+        "purpose": "systems_throughput_only",
+        "raw_source_readonly": True,
+        "code_version": code_version(),
+        "artifact": str(artifact),
+    }
+    write_json(output / "summary.json", summary)
+    return summary

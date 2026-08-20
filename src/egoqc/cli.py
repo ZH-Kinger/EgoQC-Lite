@@ -54,7 +54,7 @@ from .teacher_queue import (
     normalize_teacher_queue_provenance,
 )
 from .training_partition import freeze_training_partition
-from .generality_cohort import plan_generality_cohort
+from .generality_cohort import build_egodex_systems_cohort, plan_generality_cohort
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
 from .local_vlm_training_pool import build_local_vlm_training_pool
@@ -549,6 +549,15 @@ def main() -> None:
         help="完整留作外部测试候选的来源类型；默认 public_dataset",
     )
     generality.add_argument("--seed", type=int, default=41)
+    systems_cohort = sub.add_parser(
+        "build-egodex-systems-cohort",
+        help="从全量 EgoDex inventory 按任务均衡生成系统吞吐 cohort（不可用于训练/准确率）",
+    )
+    systems_cohort.add_argument("--inventory", type=Path, required=True)
+    systems_cohort.add_argument("--output", type=Path, required=True)
+    systems_cohort.add_argument("--maximum-videos", type=int, default=100000)
+    systems_cohort.add_argument("--clip-duration-s", type=float, default=6.0)
+    systems_cohort.add_argument("--seed", type=int, default=53)
     overlay_queue = sub.add_parser(
         "build-overlay-teacher-queue",
         help="把 Gold MANO 叠加短片绑定到教师请求，保留 raw 溯源",
@@ -1323,6 +1332,15 @@ def main() -> None:
             args.protocol,
             args.output,
             external_source_classes=args.external_source_classes or ("public_dataset",),
+            seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-egodex-systems-cohort":
+        summary = build_egodex_systems_cohort(
+            args.inventory,
+            args.output,
+            maximum_videos=args.maximum_videos,
+            clip_duration_s=args.clip_duration_s,
             seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
