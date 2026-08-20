@@ -38,7 +38,13 @@ def select_benchmark_rows(
         raise ValueError("maximum_clips must be positive")
 
     def rank(row: Dict[str, Any]) -> str:
-        identity = str(row.get("record_id") or row.get("video_id") or row.get("source_uri") or "")
+        identity = str(
+            row.get("record_id")
+            or row.get("video_id")
+            or row.get("request_id")
+            or row.get("source_uri")
+            or ""
+        )
         return hashlib.sha256(f"{seed}:{identity}".encode("utf-8")).hexdigest()
 
     if strategy not in {"stable_random", "balanced_weak"}:
@@ -75,10 +81,14 @@ def _clip_window(row: Dict[str, Any]) -> Tuple[float, float]:
     start = float(
         distillation.get("clip_start_s")
         if distillation.get("clip_start_s") is not None
+        else row.get("clip_start_s")
+        if row.get("clip_start_s") is not None
         else sampler.get("fixed_start_s") or 0.0
     )
     if distillation.get("clip_end_s") is not None:
         end = float(distillation["clip_end_s"])
+    elif row.get("clip_end_s") is not None:
+        end = float(row["clip_end_s"])
     else:
         duration = float(sampler.get("window_s") or min(8.0, float(row.get("duration_s") or 8.0)))
         end = start + duration
@@ -120,6 +130,67 @@ def _sample_video_frames(
                 raise RuntimeError(f"failed to decode target frame at {target:.3f}s")
             images.append(selected.to_image().convert("RGB"))
     return images
+
+
+def freeze_few_b_samples(
+    manifest: Path,
+    output: Path,
+    *,
+    maximum_clips: int = 200,
+    seed: int = 31,
+    selection_strategy: str = "balanced_weak",
+) -> Dict[str, Any]:
+    source_path = manifest.expanduser().resolve()
+    selected = select_benchmark_rows(
+        _read_jsonl(source_path),
+        maximum_clips,
+        seed,
+        strategy=selection_strategy,
+    )
+    if not selected:
+        raise ValueError("manifest has no locally readable source_uri rows")
+    positive_tasks: Dict[str, int] = {}
+    positive_rows = 0
+    source_counts: Dict[str, int] = {}
+    for row in selected:
+        source = str(row.get("source_dataset") or "unknown")
+        source_counts[source] = source_counts.get(source, 0) + 1
+        targets = (row.get("distillation") or {}).get("targets") or {}
+        active = [str(task) for task, value in targets.items() if float(value) >= 0.5]
+        positive_rows += int(bool(active))
+        for task in active:
+            positive_tasks[task] = positive_tasks.get(task, 0) + 1
+    output = output.expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    frozen = output / "samples.jsonl"
+    write_jsonl(frozen, selected)
+    digest = hashlib.sha256(frozen.read_bytes()).hexdigest()
+    summary = {
+        "schema_version": "egoqc-few-b-frozen-samples-v1",
+        "status": "frozen_not_evaluated",
+        "input_manifest": str(source_path),
+        "input_manifest_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "samples": len(selected),
+        "maximum_clips": maximum_clips,
+        "selection_seed": seed,
+        "selection_strategy": selection_strategy,
+        "positive_rows_by_weak_teacher": positive_rows,
+        "negative_rows_by_weak_teacher": len(selected) - positive_rows,
+        "positive_task_counts": positive_tasks,
+        "source_counts": source_counts,
+        "split_groups": len(
+            {
+                str(row.get("split_group") or (row.get("distillation") or {}).get("split_group") or row.get("video_id") or row.get("request_id"))
+                for row in selected
+            }
+        ),
+        "teacher_labels_are_human_gold": False,
+        "formal_accuracy_claim_authorized": False,
+        "samples_sha256": digest,
+        "frozen_manifest": str(frozen),
+    }
+    write_json(output / "summary.json", summary)
+    return summary
 
 
 def parse_structured_response(text: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -374,7 +445,10 @@ def benchmark_few_b_vlm(
                 "schema_version": SCHEMA_VERSION,
                 "status": "succeeded",
                 "video_id": row.get("video_id"),
-                "record_id": row.get("record_id"),
+                "record_id": row.get("record_id") or row.get("request_id"),
+                "source_dataset": row.get("source_dataset"),
+                "selection_source": row.get("selection_source"),
+                "event_codes": row.get("event_codes") or [],
                 "source_uri_sha256": hashlib.sha256(str(source).encode("utf-8")).hexdigest(),
                 "clip_start_s": start_s,
                 "clip_end_s": end_s,

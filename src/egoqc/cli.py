@@ -42,7 +42,7 @@ from .distillation import (
 )
 from .research_evaluation import evaluate_qc_research_protocol
 from .model_ablation import plan_model_ablation
-from .few_b_benchmark import benchmark_few_b_vlm
+from .few_b_benchmark import benchmark_few_b_vlm, freeze_few_b_samples
 from .few_b_comparison import compare_few_b_benchmarks
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
@@ -403,6 +403,19 @@ def main() -> None:
         "--selection-strategy",
         choices=("stable_random", "balanced_weak"),
         default="stable_random",
+    )
+    few_b_freeze = sub.add_parser(
+        "freeze-few-b-samples",
+        help="先冻结 few-B 容量实验样本和哈希，不运行模型",
+    )
+    few_b_freeze.add_argument("--manifest", type=Path, required=True)
+    few_b_freeze.add_argument("--output", type=Path, required=True)
+    few_b_freeze.add_argument("--maximum-clips", type=int, default=200)
+    few_b_freeze.add_argument("--seed", type=int, default=31)
+    few_b_freeze.add_argument(
+        "--selection-strategy",
+        choices=("stable_random", "balanced_weak"),
+        default="balanced_weak",
     )
     few_b_compare = sub.add_parser(
         "compare-few-b-benchmarks",
@@ -1118,6 +1131,15 @@ def main() -> None:
             device=args.device,
             precision=args.precision,
             max_new_tokens=args.max_new_tokens,
+            seed=args.seed,
+            selection_strategy=args.selection_strategy,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "freeze-few-b-samples":
+        summary = freeze_few_b_samples(
+            args.manifest,
+            args.output,
+            maximum_clips=args.maximum_clips,
             seed=args.seed,
             selection_strategy=args.selection_strategy,
         )
