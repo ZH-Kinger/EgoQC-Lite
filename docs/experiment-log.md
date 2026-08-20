@@ -249,3 +249,10 @@ P50/P95、吞吐、CPU/GPU/内存：
 - 统计约束：每任务自动正判若零假阳性，至少 381 次才能使 95% Wilson precision 下界超过 0.99；不足时明确报告 evidence insufficient。
 - 数据安全：本次仅读取 `/mnt/workspace` 队列元数据，未修改 `/mnt/data` OSS/CPFS 原始数据。
 - 协议：`docs/generality-evaluation-protocol.md`；机器配置：`config/qc_generality_protocol_v1.json`。
+
+## EXP-016：共享挂载别名安全更正
+
+- 发现：`/mnt/data` 与 `/mnt/workspace` 的 realpath 名称不同，但设备号、inode、挂载源与一级目录完全相同，实际为同一 CPFS 根的两个别名。
+- 影响：仅检查输出字符串是否位于 `/mnt/data` 下会漏掉 `/mnt/workspace/oss/...` 这类对同一原始目录的别名写入。
+- 处置：暂停远端 cohort 生成；保护逻辑改为原始子命名空间 + 设备号/inode 别名识别；后续派生产物统一进入 `/mnt/workspace/egoqc-derived`。
+- 本轮远端动作：仅只读执行 `realpath`、`stat`、`findmnt`、一级目录枚举；此前只更新了 `/mnt/workspace/ie-qc-code` 代码，尚未运行 cohort 规划器。

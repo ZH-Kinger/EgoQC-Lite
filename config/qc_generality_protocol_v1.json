@@ -2,6 +2,17 @@
   "schema_version": "egoqc-generality-protocol-v1",
   "status": "pre_registered_targets_not_measured_results",
   "unit_of_independence": "split_group_raw_video",
+  "storage_safety": {
+    "mount_aliases": ["/mnt/data", "/mnt/workspace"],
+    "derived_root": "/mnt/workspace/egoqc-derived",
+    "protected_raw_namespaces": [
+      "/mnt/data/oss",
+      "/mnt/data/shutu",
+      "/mnt/data/egodex"
+    ],
+    "path_prefix_separation_is_sufficient": false,
+    "mount_identity_check_required": true
+  },
   "systems_scale_cohort": {
     "minimum_unique_clips": 100000,
     "purpose": "吞吐、失败率、缓存命中率与百万小时外推；不用于准确率结论",

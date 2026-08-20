@@ -36,6 +36,8 @@
 - 现有 3,290 个独立组可作为第一批候选池，但 Gold 目标仍短缺 10,000 个独立人工标签组。
 - 下一轮扩样优先增加新的原视频、供应商、设备和 raw ego 数据；不再通过同视频多切 clip 制造表面样本量。
 - 先建 100,000-clip 无标签吞吐池，同时从跨来源候选中分层抽取 10,000 个 Gold；其中 20% 双人标注，全部分歧仲裁。
-- 所有派生产物写入 `/mnt/workspace`，OSS/CPFS 原始数据保持只读。
+- `/mnt/data` 与 `/mnt/workspace` 是同一 CPFS 根的两个挂载别名，不能再把路径前缀当作物理隔离。
+- 原始命名空间 `/mnt/data/oss`、`/mnt/data/shutu`、`/mnt/data/egodex` 及其 `/mnt/workspace/*` 别名均禁止写入。
+- 后续新派生产物统一写入 `/mnt/workspace/egoqc-derived`；代码用设备号和 inode 识别挂载别名，不能只做字符串前缀判断。
 
 机器可读的预注册阈值位于 `config/qc_generality_protocol_v1.json`。

@@ -32,3 +32,13 @@ def test_raw_stamp_detects_mutation(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="changed while being read"):
         assert_raw_file_unchanged(source, before)
+
+
+def test_mount_alias_of_protected_raw_root_is_rejected(tmp_path: Path) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    alias = tmp_path / "raw-alias"
+    alias.symlink_to(raw, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="protected raw root"):
+        assert_derived_output(alias / "derived", protected_roots=[raw])

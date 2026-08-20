@@ -54,6 +54,7 @@ from .teacher_queue import (
     normalize_teacher_queue_provenance,
 )
 from .training_partition import freeze_training_partition
+from .generality_cohort import plan_generality_cohort
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
 from .local_vlm_training_pool import build_local_vlm_training_pool
@@ -534,6 +535,20 @@ def main() -> None:
     partition.add_argument("--output", type=Path, required=True)
     partition.add_argument("--validation-fraction", type=float, default=0.5)
     partition.add_argument("--seed", type=int, default=29)
+    generality = sub.add_parser(
+        "plan-generality-cohort",
+        help="跨来源按原视频组去重，生成训练、Gold 候选和普遍性覆盖缺口",
+    )
+    generality.add_argument("queues", type=Path, nargs="+")
+    generality.add_argument("--protocol", type=Path, required=True)
+    generality.add_argument("--output", type=Path, required=True)
+    generality.add_argument(
+        "--external-source-class",
+        action="append",
+        dest="external_source_classes",
+        help="完整留作外部测试候选的来源类型；默认 public_dataset",
+    )
+    generality.add_argument("--seed", type=int, default=41)
     overlay_queue = sub.add_parser(
         "build-overlay-teacher-queue",
         help="把 Gold MANO 叠加短片绑定到教师请求，保留 raw 溯源",
@@ -1299,6 +1314,15 @@ def main() -> None:
             args.gold_events,
             args.output,
             validation_fraction=args.validation_fraction,
+            seed=args.seed,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "plan-generality-cohort":
+        summary = plan_generality_cohort(
+            args.queues,
+            args.protocol,
+            args.output,
+            external_source_classes=args.external_source_classes or ("public_dataset",),
             seed=args.seed,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
