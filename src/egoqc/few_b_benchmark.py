@@ -119,16 +119,44 @@ def _sample_video_frames(
         stream = container.streams.video[0]
         fps = float(stream.average_rate) if stream.average_rate else 30.0
         tolerance = 0.5 / max(fps, 1.0)
-        for target in targets:
-            container.seek(max(0, int(target * av.time_base)), any_frame=False, backward=True)
-            selected = None
-            for frame in container.decode(stream):
-                selected = frame
-                if frame.time is None or float(frame.time) >= target - tolerance:
-                    break
-            if selected is None:
-                raise RuntimeError(f"failed to decode target frame at {target:.3f}s")
-            images.append(selected.to_image().convert("RGB"))
+        seek_s = max(0.0, start_s - 1.0)
+        if stream.time_base is not None and start_s > 0:
+            container.seek(
+                int(seek_s / float(stream.time_base)),
+                stream=stream,
+                any_frame=False,
+                backward=True,
+            )
+        target_index = 0
+        decoded_index = 0
+        last_image = None
+        for frame in container.decode(stream):
+            frame_time = (
+                float(frame.time)
+                if frame.time is not None
+                else seek_s + decoded_index / max(fps, 1e-6)
+            )
+            decoded_index += 1
+            if frame_time + tolerance < targets[target_index]:
+                continue
+            image = frame.to_image().convert("RGB")
+            if last_image is not None:
+                last_image.close()
+            last_image = image.copy()
+            while target_index < len(targets) and frame_time >= targets[target_index] - tolerance:
+                images.append(image.copy())
+                target_index += 1
+            image.close()
+            if target_index >= len(targets):
+                break
+        while len(images) < frame_count and last_image is not None:
+            images.append(last_image.copy())
+        if last_image is not None:
+            last_image.close()
+        if len(images) != frame_count:
+            raise RuntimeError(
+                f"failed to decode {frame_count} frames from {path} at {start_s:.3f}..{end_s:.3f}"
+            )
     return images
 
 

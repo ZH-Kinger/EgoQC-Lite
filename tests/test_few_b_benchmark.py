@@ -1,13 +1,32 @@
 import json
 from pathlib import Path
 
+import av
+import numpy as np
+
 from egoqc.few_b_benchmark import (
     _clip_window,
+    _sample_video_frames,
     freeze_few_b_samples,
     normalize_sparse_findings,
     parse_structured_response,
     select_benchmark_rows,
 )
+
+
+def _write_video(path: Path, frames: int = 180) -> None:
+    with av.open(str(path), "w") as container:
+        stream = container.add_stream("mpeg4", rate=30)
+        stream.width = 64
+        stream.height = 48
+        stream.pix_fmt = "yuv420p"
+        for index in range(frames):
+            array = np.full((48, 64, 3), index % 255, dtype=np.uint8)
+            frame = av.VideoFrame.from_ndarray(array, format="rgb24")
+            for packet in stream.encode(frame):
+                container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
 
 
 def test_parse_structured_response_accepts_plain_and_fenced_json() -> None:
@@ -68,6 +87,17 @@ def test_clip_window_accepts_teacher_queue_fields() -> None:
     assert _clip_window(
         {"clip_start_s": 19.3, "clip_end_s": 25.9, "duration_s": 42.8}
     ) == (19.3, 25.9)
+
+
+def test_sample_video_frames_decodes_one_forward_window(tmp_path: Path) -> None:
+    video = tmp_path / "sample.mp4"
+    _write_video(video)
+
+    frames = _sample_video_frames(video, 1.0, 5.0, 8)
+
+    assert len(frames) == 8
+    means = [float(np.asarray(frame).mean()) for frame in frames]
+    assert means == sorted(means)
 
 
 def test_freeze_few_b_samples_writes_balanced_hashed_manifest(tmp_path: Path) -> None:

@@ -55,6 +55,7 @@ from .teacher_queue import (
 from .training_partition import freeze_training_partition
 from .queue_gold import build_queue_gold_review, render_queue_gold_overlays
 from .teacher_training_pool import build_teacher_training_pool
+from .local_vlm_training_pool import build_local_vlm_training_pool
 from .synthetic_qc import build_synthetic_qc_training
 from .interventions import plan_qc_interventions, run_qc_interventions
 from .undistortion import plan_vitra_undistortion, run_vitra_undistortion, verify_vitra_undistortion
@@ -280,6 +281,18 @@ def main() -> None:
     teacher_pool.add_argument("--output", type=Path, required=True)
     teacher_pool.add_argument("--minimum-overall-confidence", type=float, default=0.85)
     teacher_pool.add_argument("--minimum-task-confidence", type=float, default=0.70)
+    local_teacher_pool = sub.add_parser(
+        "build-local-vlm-training-pool",
+        help="把本地 few-B 稀疏预测整理为仅训练用弱标签和人工分歧队列",
+    )
+    local_teacher_pool.add_argument("--queue", type=Path, required=True)
+    local_teacher_pool.add_argument("--predictions", type=Path, required=True)
+    local_teacher_pool.add_argument(
+        "--task-config", type=Path, default=Path("config/visual_model_tasks.json")
+    )
+    local_teacher_pool.add_argument("--output", type=Path, required=True)
+    local_teacher_pool.add_argument("--minimum-overall-confidence", type=float, default=0.80)
+    local_teacher_pool.add_argument("--local-teacher-weight-cap", type=float, default=0.25)
     synthetic_qc = sub.add_parser(
         "build-synthetic-qc-training",
         help="从高置信干净 clip 构建只用于训练的在线受控异常增强",
@@ -1035,6 +1048,16 @@ def main() -> None:
             args.output,
             minimum_overall_confidence=args.minimum_overall_confidence,
             minimum_task_confidence=args.minimum_task_confidence,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "build-local-vlm-training-pool":
+        summary = build_local_vlm_training_pool(
+            args.queue,
+            args.predictions,
+            args.task_config,
+            args.output,
+            minimum_overall_confidence=args.minimum_overall_confidence,
+            local_teacher_weight_cap=args.local_teacher_weight_cap,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "build-synthetic-qc-training":
