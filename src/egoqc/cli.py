@@ -45,6 +45,7 @@ from .model_ablation import plan_model_ablation
 from .few_b_benchmark import benchmark_few_b_vlm, freeze_few_b_samples
 from .few_b_frame_cache import predecode_few_b_frame_cache
 from .few_b_comparison import compare_few_b_benchmarks
+from .prompt_ablation import compare_paired_prompt_predictions
 from .clip_selection import plan_qc_clips
 from .adapter_clip_selection import plan_adapter_clips
 from .teacher_api import run_teacher_api
@@ -475,6 +476,14 @@ def main() -> None:
     )
     few_b_compare.add_argument("--teacher-manifest", type=Path, required=True)
     few_b_compare.add_argument("--output", type=Path, required=True)
+    prompt_compare = sub.add_parser(
+        "compare-prompt-ablation",
+        help="按相同 clip ID 比较两版视觉提示词行为，不声称人工 Gold 准确率",
+    )
+    prompt_compare.add_argument("--baseline-root", type=Path, required=True)
+    prompt_compare.add_argument("--candidate-root", type=Path, required=True)
+    prompt_compare.add_argument("--output", type=Path, required=True)
+    prompt_compare.add_argument("--threshold", type=float, default=0.5)
     clip_plan = sub.add_parser(
         "plan-qc-clips",
         help="把逐帧异常自动合并为 4–8 秒视觉模型候选片段",
@@ -1269,6 +1278,14 @@ def main() -> None:
             args.benchmark_roots,
             args.teacher_manifest,
             args.output,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.command == "compare-prompt-ablation":
+        summary = compare_paired_prompt_predictions(
+            args.baseline_root,
+            args.candidate_root,
+            args.output,
+            threshold=args.threshold,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-qc-clips":
