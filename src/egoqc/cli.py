@@ -197,6 +197,10 @@ def main() -> None:
         "--video-check", choices=("header", "count", "sample-quality"), default="header"
     )
     generic_ego.add_argument("--config", type=Path, default=default_config)
+    generic_ego.add_argument(
+        "--task-taxonomy", type=Path,
+        help="可选任务分类词表；默认使用项目内 config/task_taxonomy.json",
+    )
     completion_plan = sub.add_parser(
         "plan-completion",
         help="分析公开 LeRobot 数据的非关键缺失字段并生成安全补齐计划",
@@ -241,6 +245,10 @@ def main() -> None:
     training_views.add_argument(
         "--license-id",
         help="许可证或内部审批编号；缺失时只产出 technical candidates，不进入 training-ready",
+    )
+    training_views.add_argument(
+        "--task-taxonomy", type=Path,
+        help="可选任务分类词表；默认使用项目内 config/task_taxonomy.json",
     )
     vla_smoke = sub.add_parser(
         "smoke-vla-loader",
@@ -1061,6 +1069,7 @@ def main() -> None:
             limit=args.limit,
             video_check=args.video_check,
             video_options=generic_config.get("video_check", {}),
+            task_taxonomy_path=args.task_taxonomy,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "plan-completion":
@@ -1103,6 +1112,7 @@ def main() -> None:
             projects=args.projects,
             limit=args.limit,
             license_id=args.license_id,
+            task_taxonomy_path=args.task_taxonomy,
         )
         print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "smoke-vla-loader":

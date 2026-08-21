@@ -3,10 +3,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from egoqc.task_taxonomy import classify_task, classify_task_records
+from egoqc.task_taxonomy import classify_task, classify_task_records, compose_task_text
 
 
 class TaskTaxonomyTests(unittest.TestCase):
+    def test_compose_task_text_flattens_coarse_metadata_without_inventing_labels(self):
+        self.assertEqual(
+            compose_task_text(["pick up cup", "place cup"], "kitchen", None),
+            "pick up cup；place cup；kitchen",
+        )
+        self.assertEqual(compose_task_text(None, [], {}), "unknown")
+
     def test_multilabel_classification_does_not_invent_scene(self):
         taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())
         label = classify_task("Insert and screw the bottle cap", taxonomy)
@@ -22,6 +29,12 @@ class TaskTaxonomyTests(unittest.TestCase):
         label = classify_task("Do the special thing", taxonomy)
         self.assertEqual(label["interaction_primitives"], ["unknown"])
         self.assertTrue(label["requires_semantic_review"])
+
+    def test_english_patterns_use_word_boundaries(self):
+        taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())
+        label = classify_task("place cup on table", taxonomy)
+        self.assertIn("pick_place", label["interaction_primitives"])
+        self.assertNotIn("tie_untie", label["interaction_primitives"])
 
     def test_extended_egocentric_task_families_are_covered(self):
         taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())

@@ -10,8 +10,10 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pyarrow.parquet as pq
 
+from .data_classification import annotation_provenance, classify_capability_profile
 from .provenance import code_version
 from .report import write_json, write_jsonl, write_parquet
+from .task_taxonomy import classify_task, compose_task_text, load_task_taxonomy
 
 
 PROFILE_VERSION = "rekadaily-training-views-v1"
@@ -279,6 +281,11 @@ def _parquet_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "training_ready": row["video_pretrain"]["training_ready"],
             "mano_stage": row["mano_silver"]["stage"],
             "mano_silver_ready": row["mano_silver"]["training_ready"],
+            "capability_class": row["capability_class"],
+            "task_taxonomy_json": json.dumps(row["task_taxonomy"], ensure_ascii=False),
+            "annotation_provenance_json": json.dumps(
+                row["annotation_provenance"], ensure_ascii=False
+            ),
             "vla_split": row["vla_pretraining"]["split"],
             "vla_training_ready": row["vla_pretraining"]["training_ready"],
             "vla_objectives_json": json.dumps(row["vla_pretraining"]["allowed_objectives"], ensure_ascii=False),
@@ -304,6 +311,7 @@ def build_rekadaily_training_views(
     projects: Optional[List[str]] = None,
     limit: Optional[int] = None,
     license_id: Optional[str] = None,
+    task_taxonomy_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     dataset = dataset.expanduser().resolve()
     output = output.expanduser().resolve()
@@ -316,6 +324,7 @@ def build_rekadaily_training_views(
         raise FileNotFoundError(f"缺少 RekaDaily 索引: {index_path}")
 
     output.mkdir(parents=True, exist_ok=True)
+    taxonomy = load_task_taxonomy(task_taxonomy_path)
     inventory, inventory_summary = inventory_materialized_videos(
         dataset, output / "materialized-inventory-cache.json"
     )
@@ -404,6 +413,21 @@ def build_rekadaily_training_views(
             "source_access": "not_materialized",
             "source_size_bytes": row.get("file_size_bytes"),
         }
+        task_text = compose_task_text(
+            row.get("activities"), row.get("subcategory"), row.get("category")
+        )
+        derived_mano_present = bool(mano_report and _mano_capabilities(mano_report))
+        alignment_approved = _alignment_approved(alignment_report)
+        capabilities = {
+            "video": located is not None,
+            "coarse_activity_labels": task_text != "unknown",
+            "task_labels": False,
+            "mano_parameters": derived_mano_present,
+            "camera_intrinsics": False,
+            "camera_trajectory": False,
+            "robot_state": False,
+            "robot_action": False,
+        }
         record = {
             "record_id": f"rekadaily:{video_id}",
             "source_class": "public_dataset",
@@ -413,6 +437,15 @@ def build_rekadaily_training_views(
             "category": row.get("category"),
             "subcategory": row.get("subcategory"),
             "activities": row.get("activities"),
+            "task_text": None if task_text == "unknown" else task_text,
+            "task_taxonomy": classify_task(task_text, taxonomy),
+            "capability_class": classify_capability_profile(capabilities),
+            "annotation_provenance": annotation_provenance(
+                task_present=task_text != "unknown",
+                derived_hand_screen_present=bool(hand_report and not hand_report.get("_invalid")),
+                derived_mano_present=derived_mano_present,
+                alignment_human_approved=alignment_approved,
+            ),
             "duration_s": duration,
             "fps": fps,
             "width": width,
@@ -483,6 +516,12 @@ def build_rekadaily_training_views(
         for objective in row["vla_pretraining"]["allowed_objectives"]
     )
     split_counts = Counter(row["vla_pretraining"]["split"] for row in vla_candidates)
+    capability_class_counts = Counter(row["capability_class"] for row in records)
+    task_primitive_counts = Counter(
+        primitive
+        for row in records
+        for primitive in row["task_taxonomy"]["interaction_primitives"]
+    )
     summary = {
         "schema_version": PROFILE_VERSION,
         "dataset": str(dataset),
@@ -517,6 +556,12 @@ def build_rekadaily_training_views(
             "split_counts": dict(split_counts),
             "robot_action_supervision": 0,
             "policy": "missing targets are masked, never synthesized as ground truth",
+        },
+        "classification": {
+            "task_taxonomy_schema": taxonomy["schema_version"],
+            "capability_class_counts": dict(capability_class_counts),
+            "task_primitive_counts": dict(task_primitive_counts),
+            "mano_provenance_policy": "derived predictions remain distinct from source ground truth",
         },
         "artifacts": {
             "canonical": "all-records.jsonl",

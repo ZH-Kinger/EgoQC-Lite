@@ -72,6 +72,13 @@ class RekaDailyTrainingViewTests(unittest.TestCase):
             records = [json.loads(line) for line in (output / "all-records.jsonl").read_text().splitlines()]
             by_id = {row["video_id"]: row for row in records}
             self.assertEqual(by_id["good"]["mano_silver"]["stage"], "eligible_mano_silver")
+            self.assertEqual(by_id["good"]["capability_class"], "rgb_mano")
+            self.assertIn("pick_place", by_id["good"]["task_taxonomy"]["interaction_primitives"])
+            self.assertEqual(
+                by_id["good"]["annotation_provenance"]["mano"],
+                "derived_silver_prediction_human_approved",
+            )
+            self.assertFalse(by_id["good"]["annotation_provenance"]["mano_is_ground_truth"])
             self.assertIn("fps_below_29_9", by_id["lowfps"]["video_pretrain"]["reason_codes"])
             self.assertTrue(by_id["tarred"]["video_pretrain"]["needs_transcode"])
             self.assertEqual(by_id["good"]["vla_pretraining"]["loss_masks"]["robot_action"], 0)
@@ -79,6 +86,7 @@ class RekaDailyTrainingViewTests(unittest.TestCase):
             self.assertEqual(by_id["tarred"]["vla_pretraining"]["loss_masks"]["video_text_alignment"], 0)
             self.assertIn("mano_motion_modeling", by_id["good"]["vla_pretraining"]["allowed_objectives"])
             self.assertIn(by_id["good"]["vla_pretraining"]["split"], {"train", "validation", "test"})
+            self.assertEqual(summary["classification"]["capability_class_counts"]["rgb_mano"], 1)
             rerun = build_rekadaily_training_views(root, output, materialized_only=True)
             self.assertEqual(rerun["inventory"]["tar_cache_hits"], 1)
             self.assertEqual(rerun["inventory"]["tar_shards_scanned"], 0)

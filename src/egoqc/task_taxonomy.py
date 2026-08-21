@@ -5,9 +5,41 @@ import hashlib
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 from .report import write_json, write_jsonl
+
+
+DEFAULT_TAXONOMY_PATH = Path(__file__).resolve().parents[2] / "config" / "task_taxonomy.json"
+
+
+def load_task_taxonomy(path: Optional[Path] = None) -> Dict[str, Any]:
+    taxonomy_path = (path or DEFAULT_TAXONOMY_PATH).expanduser().resolve()
+    return json.loads(taxonomy_path.read_text(encoding="utf-8"))
+
+
+def compose_task_text(*values: Any) -> str:
+    """Flatten coarse source metadata into one honest, classifiable text field."""
+
+    parts: List[str] = []
+
+    def visit(value: Any) -> None:
+        if value in (None, "", [], {}):
+            return
+        if isinstance(value, dict):
+            for key in sorted(value):
+                visit(value[key])
+        elif isinstance(value, (list, tuple, set)):
+            for item in value:
+                visit(item)
+        else:
+            text = str(value).strip()
+            if text and text not in parts:
+                parts.append(text)
+
+    for value in values:
+        visit(value)
+    return "；".join(parts) if parts else "unknown"
 
 
 def _normalize(value: str) -> str:
@@ -17,7 +49,16 @@ def _normalize(value: str) -> str:
 
 
 def _matches(text: str, patterns: Iterable[str]) -> bool:
-    return any(_normalize(pattern) in text for pattern in patterns)
+    for pattern in patterns:
+        normalized = _normalize(pattern)
+        if not normalized:
+            continue
+        if re.search(r"[a-z0-9]", normalized):
+            if re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", text):
+                return True
+        elif normalized in text:
+            return True
+    return False
 
 
 def classify_task(task: str, taxonomy: Dict[str, Any]) -> Dict[str, Any]:

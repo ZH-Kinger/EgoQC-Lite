@@ -14,12 +14,14 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .canonical import CapabilityManifest, plan_use_cases, route_capabilities
+from .data_classification import annotation_provenance, classify_capability_profile
 from .provenance import code_version
 from .report import write_json
+from .task_taxonomy import classify_task, compose_task_text, load_task_taxonomy
 from .video import probe_video
 
 
-SCHEMA_VERSION = "egoqc-generic-ego-views-v1"
+SCHEMA_VERSION = "egoqc-generic-ego-views-v2"
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 PARQUET_SCHEMA = pa.schema([
     ("record_id", pa.string()),
@@ -38,6 +40,7 @@ PARQUET_SCHEMA = pa.schema([
     ("scene_id", pa.string()),
     ("camera_id", pa.string()),
     ("task_id", pa.string()),
+    ("capability_class", pa.string()),
     ("training_ready", pa.bool_()),
     ("split", pa.string()),
     ("split_group", pa.string()),
@@ -47,6 +50,8 @@ PARQUET_SCHEMA = pa.schema([
     ("allowed_objectives_json", pa.string()),
     ("blocked_objectives_json", pa.string()),
     ("issues_json", pa.string()),
+    ("task_taxonomy_json", pa.string()),
+    ("annotation_provenance_json", pa.string()),
     ("source_metadata_json", pa.string()),
     ("source_revision", pa.string()),
     ("code_version", pa.string()),
@@ -287,6 +292,7 @@ def _record(
     license_id: Optional[str],
     mode: str,
     video_options: Optional[Dict[str, Any]],
+    taxonomy: Dict[str, Any],
 ) -> Dict[str, Any]:
     inspection = inspect_generic_ego_video(path, mode=mode, video_options=video_options)
     probe = inspection["video_probe"]
@@ -307,6 +313,11 @@ def _record(
     if duration is None and probe.get("reported_frames") and probe.get("average_rate"):
         duration = int(probe["reported_frames"]) / float(probe["average_rate"])
     stat = path.stat()
+    task_text = compose_task_text(
+        sidecar.get("task"), sidecar.get("task_label"), sidecar.get("description"),
+        sidecar.get("activities"), sidecar.get("activity"), sidecar.get("category"),
+    )
+    capability_class = classify_capability_profile(capabilities.to_dict())
     return {
         "record_id": f"{source_dataset}:{video_id}",
         "video_id": video_id,
@@ -319,7 +330,8 @@ def _record(
         "height": probe.get("height"),
         "codec": probe.get("codec"),
         "container_format": probe.get("container_format"),
-        "task": sidecar.get("task") or sidecar.get("task_label") or sidecar.get("description"),
+        "task": None if task_text == "unknown" else task_text,
+        "task_taxonomy": classify_task(task_text, taxonomy),
         "activities": sidecar.get("activities") or sidecar.get("activity"),
         "supplier_id": sidecar.get("supplier_id"),
         "person_id": sidecar.get("person_id"),
@@ -330,6 +342,12 @@ def _record(
         "task_id": sidecar.get("task_id"),
         "source_metadata": sidecar,
         "capabilities": capabilities.to_dict(),
+        "capability_class": capability_class,
+        "annotation_provenance": annotation_provenance(
+            task_present=task_text != "unknown",
+            source_mano_present=capabilities.mano_parameters,
+            source_mano_ground_truth=capabilities.hand_ground_truth,
+        ),
         "capability_route": inspection["capability_route"],
         "use_case_eligibility": plan_use_cases(capabilities),
         "issues": inspection["issues"],
@@ -370,6 +388,7 @@ def _parquet_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "scene_id": row.get("scene_id"),
             "camera_id": row.get("camera_id"),
             "task_id": row.get("task_id"),
+            "capability_class": row["capability_class"],
             "training_ready": row["vla_pretraining"]["training_ready"],
             "split": row["vla_pretraining"]["split"],
             "split_group": row["vla_pretraining"]["split_group"],
@@ -385,6 +404,10 @@ def _parquet_rows(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 row["vla_pretraining"]["blocked_objectives"], ensure_ascii=False
             ),
             "issues_json": json.dumps(row["issues"], ensure_ascii=False),
+            "task_taxonomy_json": json.dumps(row["task_taxonomy"], ensure_ascii=False),
+            "annotation_provenance_json": json.dumps(
+                row["annotation_provenance"], ensure_ascii=False
+            ),
             "source_metadata_json": json.dumps(row["source_metadata"], ensure_ascii=False),
             "source_revision": row["provenance"]["source_revision"],
             "code_version": row["provenance"]["code_version"],
@@ -427,6 +450,7 @@ def build_generic_ego_views(
     limit: Optional[int] = None,
     video_check: str = "header",
     video_options: Optional[Dict[str, Any]] = None,
+    task_taxonomy_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     source_root = source_root.expanduser().resolve()
     output = output.expanduser().resolve()
@@ -438,6 +462,7 @@ def build_generic_ego_views(
         raise ValueError("maximum_depth 必须 >= 0")
     _ensure_readonly_source_boundary(source_root, output)
     dataset_name = source_dataset or source_root.name
+    taxonomy = load_task_taxonomy(task_taxonomy_path)
     output.mkdir(parents=True, exist_ok=True)
     jsonl_path = output / "generic-ego.jsonl"
     parquet_path = output / "generic-ego.parquet"
@@ -456,6 +481,8 @@ def build_generic_ego_views(
     capability_counts: Counter = Counter()
     objective_counts: Counter = Counter()
     use_case_counts: Counter = Counter()
+    capability_class_counts: Counter = Counter()
+    task_primitive_counts: Counter = Counter()
     parquet_buffer: List[Dict[str, Any]] = []
     parquet_writer = pq.ParquetWriter(parquet_temp, PARQUET_SCHEMA, compression="zstd")
 
@@ -468,6 +495,7 @@ def build_generic_ego_views(
             license_id,
             video_check,
             video_options,
+            taxonomy,
         )
 
     try:
@@ -500,6 +528,8 @@ def build_generic_ego_views(
                     f"{name}:{value['status']}"
                     for name, value in row["use_case_eligibility"].items()
                 )
+                capability_class_counts.update([row["capability_class"]])
+                task_primitive_counts.update(row["task_taxonomy"]["interaction_primitives"])
                 json_handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
                 parquet_buffer.extend(_parquet_rows([row]))
                 if len(parquet_buffer) >= 4096:
@@ -532,6 +562,9 @@ def build_generic_ego_views(
         "capability_counts": dict(capability_counts),
         "training_objective_counts": dict(objective_counts),
         "use_case_status_counts": dict(use_case_counts),
+        "capability_class_counts": dict(capability_class_counts),
+        "task_primitive_counts": dict(task_primitive_counts),
+        "task_taxonomy_schema": taxonomy["schema_version"],
         "missing_optional_modalities_are_failures": False,
         "artifacts": {
             "jsonl": str(output / "generic-ego.jsonl"),

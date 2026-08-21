@@ -18,6 +18,15 @@ MANO、内参或轨迹只会关闭依赖这些模态的指标，不会把视频�
 Ground Truth。通用 sidecar 中即使存在数组，正式训练前也必须经过针对该来源的 canonical
 normalizer 验证形状、单位、坐标系和时间戳；未经规范化的数值目标会保持 loss mask=0。
 
+每条输出记录会自动增加三组分类字段：
+
+- `capability_class`：区分 `rgb_only`、`rgb_text`、`rgb_mano`、
+  `rgb_calibrated_mano` 等输入能力；
+- `task_taxonomy`：从 task、activity、description 等已有文本提取交互原语、物体可供性、
+  粗细操作、单双手倾向和时序复杂度；无法可靠归类时写 `unknown` 并进入语义复核；
+- `annotation_provenance`：逐项区分来源观测、来源标注、模型派生预测、人工批准的 Silver
+  预测和真正 Ground Truth。模型补算的 MANO 永远不会被写成 Ground Truth。
+
 ## 目录与可选 sidecar
 
 ```text

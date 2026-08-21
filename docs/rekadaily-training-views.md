@@ -103,6 +103,11 @@ MANO 拟合器应写入：
 - `vla-pretrain-ready.jsonl`：许可证治理通过后可被训练作业直接消费的 VLA 预训练视图。
 - `summary.json`：数量、小时、失败原因、各阶段队列规模与代码/索引版本。
 
+`all-records` 还会自动写入 `task_taxonomy`、`capability_class` 和
+`annotation_provenance`。RekaDaily 原始 coarse activity 属于来源元数据；手部预筛属于模型
+派生预测；HaWoR/MANO 拟合即使通过人工对齐，也只标为
+`derived_silver_prediction_human_approved`，不会冒充原始 MANO 或 Ground Truth。
+
 对于数百 TB 数据，关键成本控制是：先读约数 MB 的 Parquet 元数据，再只对通过门检的
 已下载视频运行低帧率手检测；MANO 和人工复检只消费进一步缩小后的队列。tar 只扫描成员
 头部建立索引，不解包、不复制视频负载。

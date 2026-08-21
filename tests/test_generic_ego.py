@@ -103,12 +103,18 @@ class GenericEgoTests(unittest.TestCase):
             self.assertTrue(row["vla_pretraining"]["loss_masks"]["video_representation"])
             self.assertTrue(row["vla_pretraining"]["loss_masks"]["video_text_alignment"])
             self.assertFalse(row["vla_pretraining"]["loss_masks"]["mano_motion"])
+            self.assertEqual(row["capability_class"], "rgb_text")
+            self.assertIn("pick_place", row["task_taxonomy"]["interaction_primitives"])
+            self.assertEqual(row["annotation_provenance"]["mano"], "missing")
+            self.assertFalse(row["annotation_provenance"]["mano_is_ground_truth"])
             self.assertTrue(row["provenance"]["raw_immutable"])
             self.assertEqual(
                 row["use_case_eligibility"]["robot_imitation_learning"]["status"],
                 "blocked",
             )
             self.assertTrue((output / "generic-ego.parquet").is_file())
+            self.assertEqual(report["capability_class_counts"], {"rgb_text": 1})
+            self.assertEqual(report["task_primitive_counts"], {"pick_place": 1})
 
 
 if __name__ == "__main__":
