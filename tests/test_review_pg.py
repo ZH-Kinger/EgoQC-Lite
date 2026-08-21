@@ -253,3 +253,18 @@ def test_gold_review_defaults_to_machine_assisted_confirmation():
         "function render", 1
     )[0]
     assert "${mediaControls(e)}" in patch_source
+
+
+def test_review_ui_only_mounts_the_focused_video():
+    assert 'id="review-nav"' in REVIEW_HTML
+    assert 'id="previous"' in REVIEW_HTML
+    assert 'id="next"' in REVIEW_HTML
+    assert "function focusedRows" in REVIEW_HTML
+    assert "浏览器仅加载当前视频" in REVIEW_HTML
+    render_source = REVIEW_HTML.split("function render", 1)[1].split(
+        "function eventStamp", 1
+    )[0]
+    assert "const rows=focusedRows()" in render_source
+    assert "rows.map(card)" in render_source
+    assert 'class="media-shell"' in REVIEW_HTML
+    assert "function bindVideo" in REVIEW_HTML
