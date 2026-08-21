@@ -235,14 +235,18 @@ def test_error_taxonomy_and_type_filter_are_exposed():
 
 
 def test_gold_review_defaults_to_machine_assisted_confirmation():
-    assert "确认机器结论" in REVIEW_HTML
-    assert "有误报，展开修改" in REVIEW_HTML
-    assert "保存修正" in REVIEW_HTML
+    assert "标注有问题" in REVIEW_HTML
+    assert "部分或全部没问题" in REVIEW_HTML
+    assert "提交逐项判断" in REVIEW_HTML
     assert "workflow_version:'assisted-fast-v1'" in REVIEW_HTML
     assert "goldDetails(e,'confirm_machine','confirmed')" in REVIEW_HTML
-    assert "这个片段可能有什么问题" in REVIEW_HTML
+    assert "机器希望你重点检查" in REVIEW_HTML
     assert "data-seek-frame" in REVIEW_HTML
     assert "机器证据" in REVIEW_HTML
+    assert "怎样判断标注对不对" in REVIEW_HTML
+    assert "明显有问题" in REVIEW_HTML
+    assert "通常没问题" in REVIEW_HTML
+    assert "const issueExamples=" in REVIEW_HTML
     assert "看到了什么（可多选）" not in REVIEW_HTML
     assert "首个坏点（秒，可空）" not in REVIEW_HTML
     panel_source = REVIEW_HTML.split("function goldPanel", 1)[1].split(
@@ -255,19 +259,25 @@ def test_gold_review_defaults_to_machine_assisted_confirmation():
     assert "${mediaControls(e)}" in patch_source
 
 
-def test_review_ui_only_mounts_the_focused_video():
+def test_review_ui_mounts_a_lazy_infinite_review_feed():
     assert 'id="review-nav"' in REVIEW_HTML
-    assert 'id="previous"' in REVIEW_HTML
-    assert 'id="next"' in REVIEW_HTML
-    assert "function focusedRows" in REVIEW_HTML
-    assert "当前播放 1 条" in REVIEW_HTML
+    assert 'id="feed-sentinel"' in REVIEW_HTML
+    assert "const feedBatchSize=8" in REVIEW_HTML
+    assert "function renderedRows" in REVIEW_HTML
+    assert "function appendFeed" in REVIEW_HTML
+    assert "const feedObserver=new IntersectionObserver" in REVIEW_HTML
+    assert "向下滚动自动加载" in REVIEW_HTML
     render_source = REVIEW_HTML.split("function render", 1)[1].split(
         "function eventStamp", 1
     )[0]
-    assert "const rows=focusedRows()" in render_source
+    assert "const rows=renderedRows()" in render_source
     assert "rows.map(card)" in render_source
     assert 'class="media-shell"' in REVIEW_HTML
     assert "function bindVideo" in REVIEW_HTML
+    assert "const mediaObserver=new IntersectionObserver" in REVIEW_HTML
+    assert "rootMargin:'900px 0px'" in REVIEW_HTML
+    assert "function deactivateCardMedia" in REVIEW_HTML
+    assert '<video preload="none"' in REVIEW_HTML
 
 
 def test_review_video_has_persistent_controls_and_honest_resolution_selector():
@@ -296,10 +306,10 @@ def test_review_ui_explains_overlay_availability():
 def test_review_ui_preloads_adjacent_short_videos_without_mounting_them():
     assert 'id="preload-status"' in REVIEW_HTML
     assert "const mediaCache=new Map()" in REVIEW_HTML
-    assert "mediaCacheLimit=10" in REVIEW_HTML
+    assert "mediaCacheLimit=12" in REVIEW_HTML
     assert "function preloadNeighbors" in REVIEW_HTML
     assert "for(const offset of [1,2,3,4,5,-1,-2])" in REVIEW_HTML
-    assert "key!==activeKey" in REVIEW_HTML
+    assert "!activeKeys.has(key)" in REVIEW_HTML
     assert "URL.createObjectURL(blob)" in REVIEW_HTML
     assert "entry.controller.abort()" in REVIEW_HTML
     assert "preloadNeighbors()" in REVIEW_HTML
