@@ -87,6 +87,7 @@ class RekaDailyTrainingViewTests(unittest.TestCase):
             self.assertIn("mano_motion_modeling", by_id["good"]["vla_pretraining"]["allowed_objectives"])
             self.assertIn(by_id["good"]["vla_pretraining"]["split"], {"train", "validation", "test"})
             self.assertEqual(summary["classification"]["capability_class_counts"]["rgb_mano"], 1)
+            self.assertEqual(by_id["good"]["task_taxonomy"]["task_domains"], ["unknown"])
             rerun = build_rekadaily_training_views(root, output, materialized_only=True)
             self.assertEqual(rerun["inventory"]["tar_cache_hits"], 1)
             self.assertEqual(rerun["inventory"]["tar_shards_scanned"], 0)

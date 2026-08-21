@@ -63,6 +63,10 @@ def _matches(text: str, patterns: Iterable[str]) -> bool:
 
 def classify_task(task: str, taxonomy: Dict[str, Any]) -> Dict[str, Any]:
     normalized = _normalize(task)
+    domains = sorted(
+        name for name, patterns in taxonomy.get("task_domains", {}).items()
+        if _matches(normalized, patterns)
+    )
     primitives = sorted(
         name for name, patterns in taxonomy["interaction_primitives"].items()
         if _matches(normalized, patterns)
@@ -87,6 +91,7 @@ def classify_task(task: str, taxonomy: Dict[str, Any]) -> Dict[str, Any]:
         "schema_version": taxonomy["schema_version"],
         "task_text": task,
         "normalized_task": normalized,
+        "task_domains": domains or ["unknown"],
         "interaction_primitives": primitives or ["unknown"],
         "object_affordances": affordances or ["unknown"],
         "manipulation_scale": "fine" if fine else "gross_or_unknown",
@@ -169,6 +174,9 @@ def classify_task_records(
     primitive_counts = Counter(
         primitive for label in labels for primitive in label["interaction_primitives"]
     )
+    domain_counts = Counter(
+        domain for label in labels for domain in label["task_domains"]
+    )
     summary = {
         "schema_version": "egoqc-task-taxonomy-run-v1",
         "source_id": source_id,
@@ -179,6 +187,7 @@ def classify_task_records(
         "classified_tasks": sum(not row["requires_semantic_review"] for row in labels),
         "semantic_review_tasks": sum(row["requires_semantic_review"] for row in labels),
         "primitive_counts_unique_tasks": dict(primitive_counts.most_common()),
+        "domain_counts_unique_tasks": dict(domain_counts.most_common()),
         "taxonomy": str(output / "task-taxonomy.jsonl"),
         "enriched_records": str(output / "records-with-taxonomy.jsonl"),
         "semantic_review_queue": str(output / "semantic-review-tasks.jsonl"),

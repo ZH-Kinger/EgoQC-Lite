@@ -522,6 +522,11 @@ def build_rekadaily_training_views(
         for row in records
         for primitive in row["task_taxonomy"]["interaction_primitives"]
     )
+    task_domain_counts = Counter(
+        domain
+        for row in records
+        for domain in row["task_taxonomy"]["task_domains"]
+    )
     summary = {
         "schema_version": PROFILE_VERSION,
         "dataset": str(dataset),
@@ -561,6 +566,7 @@ def build_rekadaily_training_views(
             "task_taxonomy_schema": taxonomy["schema_version"],
             "capability_class_counts": dict(capability_class_counts),
             "task_primitive_counts": dict(task_primitive_counts),
+            "task_domain_counts": dict(task_domain_counts),
             "mano_provenance_policy": "derived predictions remain distinct from source ground truth",
         },
         "artifacts": {

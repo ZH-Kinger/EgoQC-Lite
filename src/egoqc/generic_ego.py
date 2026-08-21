@@ -483,6 +483,7 @@ def build_generic_ego_views(
     use_case_counts: Counter = Counter()
     capability_class_counts: Counter = Counter()
     task_primitive_counts: Counter = Counter()
+    task_domain_counts: Counter = Counter()
     parquet_buffer: List[Dict[str, Any]] = []
     parquet_writer = pq.ParquetWriter(parquet_temp, PARQUET_SCHEMA, compression="zstd")
 
@@ -530,6 +531,7 @@ def build_generic_ego_views(
                 )
                 capability_class_counts.update([row["capability_class"]])
                 task_primitive_counts.update(row["task_taxonomy"]["interaction_primitives"])
+                task_domain_counts.update(row["task_taxonomy"]["task_domains"])
                 json_handle.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
                 parquet_buffer.extend(_parquet_rows([row]))
                 if len(parquet_buffer) >= 4096:
@@ -564,6 +566,7 @@ def build_generic_ego_views(
         "use_case_status_counts": dict(use_case_counts),
         "capability_class_counts": dict(capability_class_counts),
         "task_primitive_counts": dict(task_primitive_counts),
+        "task_domain_counts": dict(task_domain_counts),
         "task_taxonomy_schema": taxonomy["schema_version"],
         "missing_optional_modalities_are_failures": False,
         "artifacts": {

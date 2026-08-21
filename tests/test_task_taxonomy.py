@@ -52,6 +52,13 @@ class TaskTaxonomyTests(unittest.TestCase):
                 self.assertIn(expected, label["interaction_primitives"])
                 self.assertFalse(label["requires_semantic_review"])
 
+    def test_coarse_public_metadata_gets_domain_without_inventing_action(self):
+        taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())
+        label = classify_task("Pharmacy worker", taxonomy)
+        self.assertEqual(label["task_domains"], ["healthcare_retail"])
+        self.assertEqual(label["interaction_primitives"], ["unknown"])
+        self.assertTrue(label["requires_semantic_review"])
+
     def test_common_chinese_supplier_phrasing_is_covered(self):
         taxonomy = json.loads(Path("config/task_taxonomy.json").read_text())
         examples = {

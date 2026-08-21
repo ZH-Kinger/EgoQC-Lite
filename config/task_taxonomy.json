@@ -1,5 +1,13 @@
 {
-  "schema_version": "egoqc-task-taxonomy-v1",
+  "schema_version": "egoqc-task-taxonomy-v2",
+  "task_domains": {
+    "construction_maintenance": ["construction", "carpentry", "repair", "electrical", "maintenance", "plumbing", "施工", "木工", "维修", "电工", "维护"],
+    "household_cleaning": ["cleaning", "laundry", "wipe surfaces", "dust", "vacuum", "housekeeping", "清洁", "洗衣", "除尘", "吸尘", "家务"],
+    "food_preparation": ["cooking", "kitchen", "food preparation", "烹饪", "厨房", "备餐"],
+    "healthcare_retail": ["pharmacy", "pharmacist", "medical retail", "药房", "药店", "药剂师"],
+    "object_access": ["containers & access", "open door", "drawer", "cabinet", "容器", "门", "抽屉", "柜门"],
+    "general_object_interaction": ["object interaction", "pick up object", "物体交互", "拿起物体"]
+  },
   "interaction_primitives": {
     "pick_place": ["pick", "place", "put", "move", "transfer", "拿", "放", "移动"],
     "open_close": ["open", "close", "lid", "door", "drawer", "打开", "关闭", "开盖"],
