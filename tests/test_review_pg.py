@@ -260,7 +260,7 @@ def test_review_ui_only_mounts_the_focused_video():
     assert 'id="previous"' in REVIEW_HTML
     assert 'id="next"' in REVIEW_HTML
     assert "function focusedRows" in REVIEW_HTML
-    assert "浏览器仅加载当前视频" in REVIEW_HTML
+    assert "当前播放 1 条" in REVIEW_HTML
     render_source = REVIEW_HTML.split("function render", 1)[1].split(
         "function eventStamp", 1
     )[0]
@@ -291,3 +291,16 @@ def test_review_ui_explains_overlay_availability():
     assert "仅 RGB" in REVIEW_HTML
     assert "叠加视频尚未生成" in REVIEW_HTML
     assert 'class="overlay-note"' in REVIEW_HTML
+
+
+def test_review_ui_preloads_adjacent_short_videos_without_mounting_them():
+    assert 'id="preload-status"' in REVIEW_HTML
+    assert "const mediaCache=new Map()" in REVIEW_HTML
+    assert "mediaCacheLimit=10" in REVIEW_HTML
+    assert "function preloadNeighbors" in REVIEW_HTML
+    assert "for(const offset of [1,2,3,4,5,-1,-2])" in REVIEW_HTML
+    assert "key!==activeKey" in REVIEW_HTML
+    assert "URL.createObjectURL(blob)" in REVIEW_HTML
+    assert "entry.controller.abort()" in REVIEW_HTML
+    assert "preloadNeighbors()" in REVIEW_HTML
+    assert 'data-media-view="${view}"' in REVIEW_HTML
