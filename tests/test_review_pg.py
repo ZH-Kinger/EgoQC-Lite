@@ -268,3 +268,18 @@ def test_review_ui_only_mounts_the_focused_video():
     assert "rows.map(card)" in render_source
     assert 'class="media-shell"' in REVIEW_HTML
     assert "function bindVideo" in REVIEW_HTML
+
+
+def test_review_video_has_persistent_controls_and_honest_resolution_selector():
+    assert 'aria-label="视频播放控制"' in REVIEW_HTML
+    assert 'class="video-progress"' in REVIEW_HTML
+    assert 'data-video-action="toggle"' in REVIEW_HTML
+    assert 'data-video-action="back"' in REVIEW_HTML
+    assert 'data-video-action="forward"' in REVIEW_HTML
+    assert 'data-video-action="mute"' in REVIEW_HTML
+    assert 'data-video-action="fullscreen"' in REVIEW_HTML
+    assert 'data-video-rate' in REVIEW_HTML
+    assert 'data-display-resolution' in REVIEW_HTML
+    assert "720p 显示" in REVIEW_HTML
+    assert "源 ${video.videoWidth}×${video.videoHeight}" in REVIEW_HTML
+    assert '<video controls' not in REVIEW_HTML
