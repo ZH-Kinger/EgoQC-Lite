@@ -280,6 +280,14 @@ def test_review_video_has_persistent_controls_and_honest_resolution_selector():
     assert 'data-video-action="fullscreen"' in REVIEW_HTML
     assert 'data-video-rate' in REVIEW_HTML
     assert 'data-display-resolution' in REVIEW_HTML
-    assert "720p 显示" in REVIEW_HTML
-    assert "源 ${video.videoWidth}×${video.videoHeight}" in REVIEW_HTML
+    assert "['720','720p']" in REVIEW_HTML
+    assert "${video.videoWidth}×${video.videoHeight}" in REVIEW_HTML
     assert '<video controls' not in REVIEW_HTML
+
+
+def test_review_ui_explains_overlay_availability():
+    assert "function overlayState" in REVIEW_HTML
+    assert "MANO 未生成" in REVIEW_HTML
+    assert "仅 RGB" in REVIEW_HTML
+    assert "叠加视频尚未生成" in REVIEW_HTML
+    assert 'class="overlay-note"' in REVIEW_HTML
